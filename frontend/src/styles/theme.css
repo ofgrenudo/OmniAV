@@ -1,0 +1,50 @@
+:root {
+  /* Primary */
+  --color-primary: #0094C9; /* Pantone 639 */
+  --color-primary-dark: #006A99; /* Pantone 641 */
+
+  /* Secondary */
+  --color-secondary-orange: #E65525; /* Pantone 166 */
+  --color-secondary-orange-light: #F36B24; /* Pantone 1585 */
+  --color-secondary-olive: #ABA536; /* Pantone 398 */
+  --color-secondary-olive-dark: #695D26; /* Pantone 3995 */
+  --color-secondary-magenta: #D9017A; /* Pantone Magenta */
+  --color-secondary-magenta-dark: #A91D54; /* Pantone 220 */
+  --color-secondary-yellow: #DECB22; /* Pantone 605 */
+
+  /* Tertiary */
+  --color-tertiary-red: #AA1F2E; /* Pantone 187 */
+  --color-tertiary-purple: #84286C; /* Pantone 249 */
+  --color-tertiary-lime: #B7BF33; /* Pantone 583 */
+  --color-tertiary-gold: #CF8C2A; /* Pantone 131 */
+  --color-tertiary-teal: #006271; /* Pantone 3155 */
+
+  /* Neutrals */
+  --color-black: #000000;
+  --color-white: #FFFFFF;
+  --color-gray-100: #F5F6F7;
+  --color-gray-200: #E5E7EA;
+  --color-gray-400: #9AA1A9;
+  --color-gray-600: #5B6570;
+  --color-gray-800: #2B323A;
+
+  /* Semantic aliases */
+  --color-background: var(--color-white);
+  --color-surface: var(--color-gray-100);
+  --color-text: var(--color-gray-800);
+  --color-text-muted: var(--color-gray-600);
+  --color-border: var(--color-gray-200);
+
+  --color-link: var(--color-primary-dark);
+  --color-link-hover: var(--color-primary);
+
+  --color-accent: var(--color-secondary-orange);
+  --color-success: var(--color-tertiary-lime);
+  --color-warning: var(--color-tertiary-gold);
+  --color-danger: var(--color-tertiary-red);
+  --color-info: var(--color-primary);
+
+  /* Fonts */
+  --font-heading: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-body: 'PT Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}

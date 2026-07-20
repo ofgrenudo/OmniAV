@@ -1,0 +1,22 @@
+.app-layout {
+  min-height: 100vh;
+  background-color: var(--color-background);
+}
+
+.app-layout__content {
+  margin-top: 56px;
+  margin-left: 240px;
+  padding: 24px;
+  transition: margin-left 0.2s ease;
+}
+
+.app-layout--collapsed .app-layout__content {
+  margin-left: 64px;
+}
+
+@media (max-width: 900px) {
+  .app-layout__content,
+  .app-layout--collapsed .app-layout__content {
+    margin-left: 0;
+  }
+}
