@@ -4,12 +4,13 @@ import Stepper from './Stepper';
 import WhenWhereStep from './steps/WhenWhereStep';
 import EquipmentStep from './steps/EquipmentStep';
 import ReviewStep from './steps/ReviewStep';
-import { getBuildings } from '../../data/buildings';
-import { getEquipment } from '../../data/inventory';
-import { submitRequest } from '../../services/requestsStore';
-import { AVRequest } from '../../types/AVRequest';
+import { listBuildings } from '../../services/buildingsApi';
+import { getEquipmentGroupAvailability, listEquipmentGroups } from '../../services/equipmentGroupsApi';
+import { assignEquipment, createRequest, getRequest } from '../../services/requestsApi';
+import { errorMessage } from '../../utils/apiError';
 import { Building } from '../../types/Building';
 import { EquipmentItem } from '../../types/EquipmentItem';
+import { Request } from '../../types/Request';
 import { SelectedEquipment } from '../../types/SelectedEquipment';
 import { createEmptyWhenWhere } from '../../types/WhenWhereData';
 import './NewRequest.css';
@@ -21,26 +22,105 @@ const NewRequest: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [whenWhere, setWhenWhere] = useState(createEmptyWhenWhere());
   const [selectedEquipment, setSelectedEquipment] = useState<SelectedEquipment[]>([]);
-  const [submittedRequest, setSubmittedRequest] = useState<AVRequest | null>(null);
+  const [submittedRequest, setSubmittedRequest] = useState<Request | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
+  const [equipmentLoading, setEquipmentLoading] = useState(false);
+  const [equipmentError, setEquipmentError] = useState<string | null>(null);
 
   useEffect(() => {
-    getBuildings().then(setBuildings);
-    getEquipment().then(setEquipment);
+    listBuildings({ pageSize: 100, sort: 'name', order: 'asc', archived: false })
+      .then((result) => setBuildings(result.data))
+      .catch(() => setBuildings([]));
   }, []);
 
-  const building = buildings.find((b) => b.id === whenWhere.buildingId);
+  useEffect(() => {
+    if (currentStep !== 2) return;
+    if (!whenWhere.firstDate || !whenWhere.startTime || !whenWhere.endTime) return;
 
-  const handleSubmit = () => {
-    const result = submitRequest({ whenWhere, equipment: selectedEquipment });
-    setSubmittedRequest(result);
+    let cancelled = false;
+    setEquipmentLoading(true);
+    setEquipmentError(null);
+
+    listEquipmentGroups({ pageSize: 100, sort: 'name', order: 'asc', archived: false, disabled: false })
+      .then((result) =>
+        Promise.all(
+          result.data.map(async (group) => {
+            const available = await getEquipmentGroupAvailability(group.id, {
+              firstDate: whenWhere.firstDate,
+              startTime: whenWhere.startTime,
+              endTime: whenWhere.endTime,
+              weeks: whenWhere.weeks,
+            });
+            return { id: group.id, name: group.name, available };
+          })
+        )
+      )
+      .then((items) => {
+        if (cancelled) return;
+        setEquipment(items);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setEquipment([]);
+        setEquipmentError(errorMessage(err, 'Failed to load equipment availability.'));
+      })
+      .finally(() => {
+        if (!cancelled) setEquipmentLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep]);
+
+  const building = buildings.find((b) => String(b.id) === whenWhere.buildingId);
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const created = await createRequest({
+        name: whenWhere.requestName,
+        firstDateNeeded: whenWhere.firstDate,
+        startTime: whenWhere.startTime,
+        endTime: whenWhere.endTime,
+        numberOfWeeks: whenWhere.weeks,
+        buildingId: Number(whenWhere.buildingId),
+        room: whenWhere.roomNumber,
+        comments: whenWhere.comments.trim() ? whenWhere.comments.trim() : null,
+      });
+
+      try {
+        for (const item of selectedEquipment) {
+          for (let i = 0; i < item.quantity; i += 1) {
+            // eslint-disable-next-line no-await-in-loop
+            await assignEquipment(created.id, item.itemId);
+          }
+        }
+        setSubmittedRequest(await getRequest(created.id));
+      } catch (assignErr) {
+        setSubmittedRequest(await getRequest(created.id).catch(() => created));
+        setSubmitError(
+          `Request #${created.id} was created, but not all equipment could be assigned: ` +
+            `${errorMessage(assignErr, 'unknown error')}. Contact AV support if you still need those items.`
+        );
+      }
+    } catch (err) {
+      setSubmitError(errorMessage(err, 'Failed to submit request.'));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleStartNew = () => {
     setWhenWhere(createEmptyWhenWhere());
     setSelectedEquipment([]);
     setSubmittedRequest(null);
+    setSubmitError(null);
     setCurrentStep(1);
   };
 
@@ -64,6 +144,8 @@ const NewRequest: React.FC = () => {
             items={equipment}
             buildingName={building?.name ?? ''}
             selected={selectedEquipment}
+            loading={equipmentLoading}
+            error={equipmentError}
             onChange={setSelectedEquipment}
             onBack={() => setCurrentStep(1)}
             onContinue={() => setCurrentStep(3)}
@@ -76,6 +158,8 @@ const NewRequest: React.FC = () => {
             buildingName={building?.name ?? ''}
             equipment={selectedEquipment}
             submittedRequest={submittedRequest}
+            submitting={submitting}
+            submitError={submitError}
             onBack={() => setCurrentStep(2)}
             onSubmit={handleSubmit}
             onStartNew={handleStartNew}

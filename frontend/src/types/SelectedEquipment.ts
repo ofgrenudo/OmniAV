@@ -1,5 +1,5 @@
 export interface SelectedEquipment {
-  itemId: string;
+  itemId: number;
   name: string;
   quantity: number;
 }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AVRequest } from '../../../types/AVRequest';
+import { Request } from '../../../types/Request';
 import { SelectedEquipment } from '../../../types/SelectedEquipment';
 import { WhenWhereData } from '../../../types/WhenWhereData';
 import { to12Hour } from '../../../utils/time';
@@ -9,7 +9,9 @@ interface ReviewStepProps {
   whenWhere: WhenWhereData;
   buildingName: string;
   equipment: SelectedEquipment[];
-  submittedRequest: AVRequest | null;
+  submittedRequest: Request | null;
+  submitting: boolean;
+  submitError: string | null;
   onBack: () => void;
   onSubmit: () => void;
   onStartNew: () => void;
@@ -20,6 +22,8 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
   buildingName,
   equipment,
   submittedRequest,
+  submitting,
+  submitError,
   onBack,
   onSubmit,
   onStartNew,
@@ -37,13 +41,28 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
           <p>
             Confirmation number: <strong>{submittedRequest.id}</strong>
           </p>
+          {submittedRequest.requestedEquipment && submittedRequest.requestedEquipment.length > 0 && (
+            <>
+              <p>
+                <strong>Assigned equipment:</strong>
+              </p>
+              <ul className="review-equipment-list">
+                {submittedRequest.requestedEquipment.map((entry) => (
+                  <li key={entry.id}>
+                    <span>{entry.equipment?.name ?? `Unit #${entry.equipmentId}`}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
+        {submitError && <p className="form-field__error">{submitError}</p>}
         <div className="request-step__actions">
           <button type="button" className="btn btn--secondary" onClick={onStartNew}>
             Submit Another Request
           </button>
-          <button type="button" className="btn btn--primary" onClick={() => navigate('/requests/mine')}>
-            View My Requests
+          <button type="button" className="btn btn--primary" onClick={() => navigate('/requests')}>
+            View All Requests
           </button>
         </div>
       </div>
@@ -109,12 +128,14 @@ const ReviewStep: React.FC<ReviewStepProps> = ({
         <p className="request-step__subtitle">Review the details above, then submit your request.</p>
       </div>
 
+      {submitError && <p className="form-field__error">{submitError}</p>}
+
       <div className="request-step__actions">
-        <button type="button" className="btn btn--secondary" onClick={onBack}>
+        <button type="button" className="btn btn--secondary" onClick={onBack} disabled={submitting}>
           Back
         </button>
-        <button type="button" className="btn btn--primary" onClick={onSubmit}>
-          Submit Request
+        <button type="button" className="btn btn--primary" onClick={onSubmit} disabled={submitting}>
+          {submitting ? 'Submitting…' : 'Submit Request'}
         </button>
       </div>
     </div>

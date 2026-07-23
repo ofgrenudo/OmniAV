@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+	<channel>
+		<title>OmniAv</title>
+		<link>http://localhost:1313/</link>
+		<description>Recent content on OmniAv</description>
+		<generator>Hugo</generator>
+		<language>en-us</language>
+		
+		
+		
+		
+			<lastBuildDate>Thu, 23 Jul 2026 14:07:39 -0400</lastBuildDate>
+		
+			<atom:link href="http://localhost:1313/index.xml" rel="self" type="application/rss+xml" />
+			<item>
+				<title>Example Page</title>
+				<link>http://localhost:1313/docs/example-page/</link>
+				<pubDate>Thu, 23 Jul 2026 14:07:39 -0400</pubDate>
+				<guid>http://localhost:1313/docs/example-page/</guid>
+				<description></description>
+			</item>
+			<item>
+				<title>Entity Relationship Diagram</title>
+				<link>http://localhost:1313/docs/db/erd/</link>
+				<pubDate>Thu, 23 Jul 2026 14:07:39 -0400</pubDate>
+				<guid>http://localhost:1313/docs/db/erd/</guid>
+				<description>&lt;p&gt;![./assets/OmniAv_ERD_v1.png]&lt;/p&gt;</description>
+			</item>
+	</channel>
+</rss>

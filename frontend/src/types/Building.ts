@@ -1,4 +1,9 @@
 export interface Building {
-  id: string;
+  id: number;
   name: string;
+  archived: boolean;
+  description: string | null;
+  address: string | null;
+  createdAt: string;
+  updatedAt: string;
 }

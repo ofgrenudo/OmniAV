@@ -6,6 +6,8 @@ interface EquipmentStepProps {
   items: EquipmentItem[];
   buildingName: string;
   selected: SelectedEquipment[];
+  loading: boolean;
+  error: string | null;
   onChange: (selected: SelectedEquipment[]) => void;
   onBack: () => void;
   onContinue: () => void;
@@ -15,11 +17,13 @@ const EquipmentStep: React.FC<EquipmentStepProps> = ({
   items,
   buildingName,
   selected,
+  loading,
+  error,
   onChange,
   onBack,
   onContinue,
 }) => {
-  const quantityFor = (itemId: string): number => selected.find((s) => s.itemId === itemId)?.quantity ?? 0;
+  const quantityFor = (itemId: number): number => selected.find((s) => s.itemId === itemId)?.quantity ?? 0;
 
   const setQuantity = (item: EquipmentItem, quantity: number) => {
     const clamped = Math.max(0, Math.min(quantity, item.available));
@@ -34,6 +38,13 @@ const EquipmentStep: React.FC<EquipmentStepProps> = ({
         Showing available inventory for {buildingName ? <strong>{buildingName}</strong> : 'the selected building'}.
       </p>
 
+      {error && <p className="form-field__error">{error}</p>}
+      {!error && loading && <p className="request-step__subtitle">Loading equipment availability…</p>}
+      {!error && !loading && items.length === 0 && (
+        <p className="request-step__subtitle">No equipment groups are available to request.</p>
+      )}
+
+      {!error && !loading && items.length > 0 && (
       <div className="equipment-grid">
         {items.map((item) => {
           const quantity = quantityFor(item.id);
@@ -68,6 +79,7 @@ const EquipmentStep: React.FC<EquipmentStepProps> = ({
           );
         })}
       </div>
+      )}
 
       <div className="request-step__actions">
         <button type="button" className="btn btn--secondary" onClick={onBack}>

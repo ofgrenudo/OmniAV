@@ -1,0 +1,32 @@
+.units-panel-cell {
+  background-color: var(--color-surface);
+  padding: 16px !important;
+  white-space: normal !important;
+}
+
+.units-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.units-panel__title {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.units-panel__form {
+  background-color: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.units-panel__checkboxes {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 18px;
+  font-size: 0.9rem;
+}
