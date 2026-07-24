@@ -124,6 +124,7 @@ test('submits a request and assigns the selected equipment', async () => {
           disabled: false,
           archived: false,
           groupId: group.id,
+          buildingId: null,
           createdAt: '',
           updatedAt: '',
         },

@@ -10,6 +10,9 @@ type Building struct {
 	Archived    bool      `json:"archived"`
 	Description *string   `json:"description"`
 	Address     *string   `json:"address"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	// Equipment is a pointer slice field populated only via Preload; a unit's BuildingID is the
+	// source of truth for the one-building-per-unit relationship.
+	Equipment []Equipment `json:"equipment,omitempty" gorm:"foreignKey:BuildingID"`
+	CreatedAt time.Time   `json:"createdAt"`
+	UpdatedAt time.Time   `json:"updatedAt"`
 }

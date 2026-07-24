@@ -79,7 +79,7 @@ test('expands a request to show its assigned equipment', async () => {
   mockedApi.getRequest.mockResolvedValue(
     makeRequest({
       requestedEquipment: [
-        { id: 1, groupId: 1, group: { id: 1, name: 'Cow Cart', description: null, disabled: false, archived: false, createdAt: '', updatedAt: '' }, equipmentId: 1, equipment: { id: 1, name: 'Cow Cart A', description: null, disabled: false, archived: false, groupId: 1, createdAt: '', updatedAt: '' }, requestId: 1 },
+        { id: 1, groupId: 1, group: { id: 1, name: 'Cow Cart', description: null, disabled: false, archived: false, createdAt: '', updatedAt: '' }, equipmentId: 1, equipment: { id: 1, name: 'Cow Cart A', description: null, disabled: false, archived: false, groupId: 1, buildingId: null, createdAt: '', updatedAt: '' }, requestId: 1 },
       ],
     })
   );
@@ -98,7 +98,7 @@ test('removing an assignment calls unassignEquipment and reloads', async () => {
   mockedApi.getRequest.mockResolvedValue(
     makeRequest({
       requestedEquipment: [
-        { id: 42, groupId: 1, equipmentId: 1, equipment: { id: 1, name: 'Cow Cart A', description: null, disabled: false, archived: false, groupId: 1, createdAt: '', updatedAt: '' }, requestId: 1 },
+        { id: 42, groupId: 1, equipmentId: 1, equipment: { id: 1, name: 'Cow Cart A', description: null, disabled: false, archived: false, groupId: 1, buildingId: null, createdAt: '', updatedAt: '' }, requestId: 1 },
       ],
     })
   );

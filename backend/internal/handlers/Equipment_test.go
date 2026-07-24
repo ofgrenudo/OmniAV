@@ -18,7 +18,7 @@ func TestEquipmentResponseContract(t *testing.T) {
 	}
 	body := decodeJSON[map[string]any](t, w)
 	assertExactKeys(t, "create response", body,
-		"id", "name", "description", "disabled", "archived", "groupId", "createdAt", "updatedAt")
+		"id", "name", "description", "disabled", "archived", "groupId", "buildingId", "createdAt", "updatedAt")
 }
 
 func TestEquipmentCreate(t *testing.T) {
@@ -52,6 +52,45 @@ func TestEquipmentCreate(t *testing.T) {
 
 	t.Run("rejects a nonexistent groupId", func(t *testing.T) {
 		w := doRequest(r, http.MethodPost, "/api/equipment", equipmentInput{Name: "Orphan Unit", GroupID: 999999})
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("creates equipment assigned to a building", func(t *testing.T) {
+		building := seedBuilding(t, "Main Hall", false)
+		w := doRequest(r, http.MethodPost, "/api/equipment", equipmentInput{
+			Name:       "Cow Cart C",
+			GroupID:    group.ID,
+			BuildingID: &building.ID,
+		})
+		if w.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+		got := decodeJSON[models.Equipment](t, w)
+		if got.BuildingID == nil || *got.BuildingID != building.ID {
+			t.Errorf("BuildingID = %v, want %d", got.BuildingID, building.ID)
+		}
+	})
+
+	t.Run("allows creating equipment with no building assigned", func(t *testing.T) {
+		w := doRequest(r, http.MethodPost, "/api/equipment", equipmentInput{Name: "Unassigned Unit", GroupID: group.ID})
+		if w.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+		got := decodeJSON[models.Equipment](t, w)
+		if got.BuildingID != nil {
+			t.Errorf("BuildingID = %v, want nil", got.BuildingID)
+		}
+	})
+
+	t.Run("rejects a nonexistent buildingId", func(t *testing.T) {
+		bogus := uint(999999)
+		w := doRequest(r, http.MethodPost, "/api/equipment", equipmentInput{
+			Name:       "Orphan Unit",
+			GroupID:    group.ID,
+			BuildingID: &bogus,
+		})
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 		}
@@ -106,6 +145,45 @@ func TestEquipmentUpdate(t *testing.T) {
 		w := doRequest(r, http.MethodPut, "/api/equipment/999999", equipmentInput{Name: "Nope", GroupID: group.ID})
 		if w.Code != http.StatusNotFound {
 			t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("moves a unit to a different building, replacing the prior one", func(t *testing.T) {
+		buildingA := seedBuilding(t, "Building A", false)
+		buildingB := seedBuilding(t, "Building B", false)
+
+		w := doRequest(r, http.MethodPut, fmt.Sprintf("/api/equipment/%d", e.ID), equipmentInput{
+			Name:       e.Name,
+			GroupID:    group.ID,
+			BuildingID: &buildingA.ID,
+		})
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+
+		w = doRequest(r, http.MethodPut, fmt.Sprintf("/api/equipment/%d", e.ID), equipmentInput{
+			Name:       e.Name,
+			GroupID:    group.ID,
+			BuildingID: &buildingB.ID,
+		})
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+		got := decodeJSON[models.Equipment](t, w)
+		if got.BuildingID == nil || *got.BuildingID != buildingB.ID {
+			t.Errorf("BuildingID = %v, want %d (only the most recent building)", got.BuildingID, buildingB.ID)
+		}
+	})
+
+	t.Run("rejects a nonexistent buildingId", func(t *testing.T) {
+		bogus := uint(999999)
+		w := doRequest(r, http.MethodPut, fmt.Sprintf("/api/equipment/%d", e.ID), equipmentInput{
+			Name:       e.Name,
+			GroupID:    group.ID,
+			BuildingID: &bogus,
+		})
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 		}
 	})
 }
@@ -177,6 +255,31 @@ func TestEquipmentListFilters(t *testing.T) {
 
 	t.Run("rejects an invalid groupId filter", func(t *testing.T) {
 		w := doRequest(r, http.MethodGet, "/api/equipment?groupId=nope", nil)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("filters by buildingId", func(t *testing.T) {
+		building := seedBuilding(t, "Library", false)
+		w := doRequest(r, http.MethodPost, "/api/equipment", equipmentInput{
+			Name:       "Cow Cart In Library",
+			GroupID:    cowCart.ID,
+			BuildingID: &building.ID,
+		})
+		if w.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+
+		w = doRequest(r, http.MethodGet, fmt.Sprintf("/api/equipment?buildingId=%d", building.ID), nil)
+		got := decodeJSON[equipmentListEnvelope](t, w)
+		if len(got.Data) != 1 || got.Data[0].Name != "Cow Cart In Library" {
+			t.Errorf("expected only Cow Cart In Library, got %+v", got.Data)
+		}
+	})
+
+	t.Run("rejects an invalid buildingId filter", func(t *testing.T) {
+		w := doRequest(r, http.MethodGet, "/api/equipment?buildingId=nope", nil)
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 		}

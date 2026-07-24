@@ -36,6 +36,7 @@ type equipmentInput struct {
 	Disabled    bool
 	Archived    bool
 	GroupID     uint `binding:"required"`
+	BuildingID  *uint
 }
 
 var equipmentSortColumns = map[string]string{
@@ -52,6 +53,16 @@ var equipmentSortColumns = map[string]string{
 func (h *EquipmentHandler) equipmentGroupExists(groupID uint) (bool, error) {
 	var count int64
 	if err := h.DB.Model(&models.EquipmentGroup{}).Where("id = ?", groupID).Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// buildingExists validates a client-supplied BuildingID on create/update, same rationale as
+// equipmentGroupExists: a 400, since the building isn't the resource the URL identifies.
+func (h *EquipmentHandler) buildingExists(buildingID uint) (bool, error) {
+	var count int64
+	if err := h.DB.Model(&models.Building{}).Where("id = ?", buildingID).Count(&count).Error; err != nil {
 		return false, err
 	}
 	return count > 0, nil
@@ -84,6 +95,15 @@ func (h *EquipmentHandler) List(c *gin.Context) {
 			return
 		}
 		query = query.Where("group_id = ?", uint(groupID))
+	}
+
+	if v := strings.TrimSpace(c.Query("buildingId")); v != "" {
+		buildingID, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			badRequest(c, "invalid buildingId filter")
+			return
+		}
+		query = query.Where("building_id = ?", uint(buildingID))
 	}
 
 	if archived, present, err := parseOptionalBool(c, "archived"); err != nil {
@@ -171,12 +191,25 @@ func (h *EquipmentHandler) Create(c *gin.Context) {
 		return
 	}
 
+	if input.BuildingID != nil {
+		exists, err := h.buildingExists(*input.BuildingID)
+		if err != nil {
+			internalError(c, err)
+			return
+		}
+		if !exists {
+			badRequest(c, "building not found")
+			return
+		}
+	}
+
 	equipment := models.Equipment{
 		Name:        input.Name,
 		Description: input.Description,
 		Disabled:    input.Disabled,
 		Archived:    input.Archived,
 		GroupID:     input.GroupID,
+		BuildingID:  input.BuildingID,
 	}
 
 	if err := h.DB.Create(&equipment).Error; err != nil {
@@ -226,11 +259,24 @@ func (h *EquipmentHandler) Update(c *gin.Context) {
 		return
 	}
 
+	if input.BuildingID != nil {
+		exists, err := h.buildingExists(*input.BuildingID)
+		if err != nil {
+			internalError(c, err)
+			return
+		}
+		if !exists {
+			badRequest(c, "building not found")
+			return
+		}
+	}
+
 	equipment.Name = input.Name
 	equipment.Description = input.Description
 	equipment.Disabled = input.Disabled
 	equipment.Archived = input.Archived
 	equipment.GroupID = input.GroupID
+	equipment.BuildingID = input.BuildingID
 
 	if err := h.DB.Save(&equipment).Error; err != nil {
 		internalError(c, err)

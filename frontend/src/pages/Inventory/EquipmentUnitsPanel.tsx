@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Building } from '../../types/Building';
 import { Equipment } from '../../types/Equipment';
 import {
   EquipmentInput,
@@ -7,6 +8,7 @@ import {
   listEquipment,
   updateEquipment,
 } from '../../services/equipmentApi';
+import { listBuildings } from '../../services/buildingsApi';
 import { errorMessage } from '../../utils/apiError';
 
 interface EquipmentUnitsPanelProps {
@@ -19,15 +21,23 @@ interface UnitFormValues {
   description: string;
   disabled: boolean;
   archived: boolean;
+  buildingId: string;
 }
 
-const emptyFormValues: UnitFormValues = { name: '', description: '', disabled: false, archived: false };
+const emptyFormValues: UnitFormValues = {
+  name: '',
+  description: '',
+  disabled: false,
+  archived: false,
+  buildingId: '',
+};
 
 const toFormValues = (unit: Equipment): UnitFormValues => ({
   name: unit.name,
   description: unit.description ?? '',
   disabled: unit.disabled,
   archived: unit.archived,
+  buildingId: unit.buildingId !== null ? String(unit.buildingId) : '',
 });
 
 const toInput = (groupId: number, values: UnitFormValues): EquipmentInput => ({
@@ -36,6 +46,7 @@ const toInput = (groupId: number, values: UnitFormValues): EquipmentInput => ({
   disabled: values.disabled,
   archived: values.archived,
   groupId,
+  buildingId: values.buildingId ? Number(values.buildingId) : null,
 });
 
 const unitStatus = (unit: Equipment): { label: string; badgeClass: string } => {
@@ -50,10 +61,29 @@ const EquipmentUnitsPanel: React.FC<EquipmentUnitsPanelProps> = ({ groupId, grou
   const [error, setError] = useState<string | null>(null);
   const [refreshToken, setRefreshToken] = useState(0);
 
+  const [buildings, setBuildings] = useState<Building[]>([]);
+
   const [editingId, setEditingId] = useState<number | 'new' | null>(null);
   const [formValues, setFormValues] = useState<UnitFormValues>(emptyFormValues);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    listBuildings({ pageSize: 100, sort: 'name', order: 'asc', archived: false })
+      .then((result) => {
+        if (!cancelled) setBuildings(result.data);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const buildingName = (buildingId: number | null): string => {
+    if (buildingId === null) return '—';
+    return buildings.find((b) => b.id === buildingId)?.name ?? `#${buildingId}`;
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -171,6 +201,21 @@ const EquipmentUnitsPanel: React.FC<EquipmentUnitsPanelProps> = ({ groupId, grou
               onChange={(e) => setFormValues({ ...formValues, description: e.target.value })}
             />
           </div>
+          <div className="form-field">
+            <label htmlFor={`unit-building-${groupId}`}>Building</label>
+            <select
+              id={`unit-building-${groupId}`}
+              value={formValues.buildingId}
+              onChange={(e) => setFormValues({ ...formValues, buildingId: e.target.value })}
+            >
+              <option value="">Unassigned</option>
+              {buildings.map((building) => (
+                <option key={building.id} value={building.id}>
+                  {building.name}
+                </option>
+              ))}
+            </select>
+          </div>
           {editingId !== 'new' && (
             <div className="units-panel__checkboxes">
               <label>
@@ -215,6 +260,7 @@ const EquipmentUnitsPanel: React.FC<EquipmentUnitsPanelProps> = ({ groupId, grou
             <tr>
               <th>Name</th>
               <th className="data-table__cell--wrap">Description</th>
+              <th>Building</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -226,6 +272,7 @@ const EquipmentUnitsPanel: React.FC<EquipmentUnitsPanelProps> = ({ groupId, grou
                 <tr key={unit.id}>
                   <td>{unit.name}</td>
                   <td className="data-table__cell--wrap">{unit.description ?? '—'}</td>
+                  <td>{buildingName(unit.buildingId)}</td>
                   <td>
                     <span className={`badge ${status.badgeClass}`}>{status.label}</span>
                   </td>

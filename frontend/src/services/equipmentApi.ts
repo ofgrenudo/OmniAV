@@ -19,6 +19,7 @@ export type EquipmentListParams = {
   order?: 'asc' | 'desc';
   q?: string;
   groupId?: number;
+  buildingId?: number;
   archived?: boolean;
   disabled?: boolean;
 };
@@ -29,6 +30,7 @@ export interface EquipmentInput {
   disabled?: boolean;
   archived?: boolean;
   groupId: number;
+  buildingId?: number | null;
 }
 
 export const listEquipment = (params: EquipmentListParams = {}): Promise<EquipmentListResult> =>
