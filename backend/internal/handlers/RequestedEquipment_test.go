@@ -16,7 +16,7 @@ func TestRequestedEquipmentResponseContract(t *testing.T) {
 		firstDate: futureDate(10), startTime: clockTime(9, 0), endTime: clockTime(10, 0),
 	})
 	group := seedGroup(t, "Cow Cart", false, false)
-	seedEquipment(t, group.ID, "Cow Cart A", false, false)
+	seedEquipment(t, group.ID, building.ID, "Cow Cart A", false, false)
 
 	w := doRequest(r, http.MethodPost, fmt.Sprintf("/api/requests/%d/equipment", request.ID),
 		requestedEquipmentInput{GroupID: group.ID})
@@ -38,8 +38,8 @@ func TestRequestedEquipmentCreate(t *testing.T) {
 		firstDate: futureDate(10), startTime: clockTime(9, 0), endTime: clockTime(10, 0),
 	})
 	group := seedGroup(t, "Cow Cart", false, false)
-	seedEquipment(t, group.ID, "Cow Cart B", false, false)
-	seedEquipment(t, group.ID, "Cow Cart A", false, false)
+	seedEquipment(t, group.ID, building.ID, "Cow Cart B", false, false)
+	seedEquipment(t, group.ID, building.ID, "Cow Cart A", false, false)
 
 	t.Run("assigns the alphabetically-first available unit", func(t *testing.T) {
 		w := doRequest(r, http.MethodPost, fmt.Sprintf("/api/requests/%d/equipment", request.ID),
@@ -90,7 +90,7 @@ func TestRequestedEquipmentCreate(t *testing.T) {
 
 	t.Run("409s for a disabled group", func(t *testing.T) {
 		disabledGroup := seedGroup(t, "Disabled Group", true, false)
-		seedEquipment(t, disabledGroup.ID, "Unit A", false, false)
+		seedEquipment(t, disabledGroup.ID, building.ID, "Unit A", false, false)
 		w := doRequest(r, http.MethodPost, fmt.Sprintf("/api/requests/%d/equipment", request.ID),
 			requestedEquipmentInput{GroupID: disabledGroup.ID})
 		if w.Code != http.StatusConflict {
@@ -107,7 +107,7 @@ func TestRequestedEquipmentList(t *testing.T) {
 		firstDate: futureDate(10), startTime: clockTime(9, 0), endTime: clockTime(10, 0),
 	})
 	group := seedGroup(t, "Cow Cart", false, false)
-	seedEquipment(t, group.ID, "Cow Cart A", false, false)
+	seedEquipment(t, group.ID, building.ID, "Cow Cart A", false, false)
 
 	if w := doRequest(r, http.MethodPost, fmt.Sprintf("/api/requests/%d/equipment", request.ID),
 		requestedEquipmentInput{GroupID: group.ID}); w.Code != http.StatusCreated {
@@ -132,7 +132,7 @@ func TestRequestedEquipmentDelete(t *testing.T) {
 		firstDate: futureDate(10), startTime: clockTime(9, 0), endTime: clockTime(10, 0),
 	})
 	group := seedGroup(t, "Cow Cart", false, false)
-	seedEquipment(t, group.ID, "Cow Cart A", false, false)
+	seedEquipment(t, group.ID, building.ID, "Cow Cart A", false, false)
 
 	assignResp := doRequest(r, http.MethodPost, fmt.Sprintf("/api/requests/%d/equipment", request.ID),
 		requestedEquipmentInput{GroupID: group.ID})
@@ -167,7 +167,7 @@ func TestRequestedEquipmentDelete(t *testing.T) {
 		// Isolated fixtures: `request` already holds the group's only unit from the subtest
 		// above, so reuse would spuriously conflict with itself rather than testing the mismatch.
 		otherGroup := seedGroup(t, "Other Cart", false, false)
-		seedEquipment(t, otherGroup.ID, "Other Cart A", false, false)
+		seedEquipment(t, otherGroup.ID, building.ID, "Other Cart A", false, false)
 		otherRequest := seedRequest(t, requestOpts{
 			buildingID: building.ID, name: "Other Lecture",
 			firstDate: futureDate(20), startTime: clockTime(9, 0), endTime: clockTime(10, 0),

@@ -89,6 +89,54 @@ func TestRequestCreate(t *testing.T) {
 		}
 	})
 
+	t.Run("accepts rooms made of digits and the wing letters a-c", func(t *testing.T) {
+		for i, room := range []string{"204", "123a", "12C", "3b"} {
+			input := validRequestInput(building.ID, "Room "+room, 10+i)
+			input.Room = room
+			w := doRequest(r, http.MethodPost, "/api/requests", input)
+			if w.Code != http.StatusCreated {
+				t.Errorf("expected 201 for room %q, got %d: %s", room, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("rejects a room with characters outside 0-9 and a-c", func(t *testing.T) {
+		for _, room := range []string{"204d", "lobby", "12 4", "204-A", "204.1", "Gym"} {
+			input := validRequestInput(building.ID, "Whatever", 10)
+			input.Room = room
+			w := doRequest(r, http.MethodPost, "/api/requests", input)
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("expected 400 for room %q, got %d: %s", room, w.Code, w.Body.String())
+			}
+		}
+	})
+
+	t.Run("accepts times at the edges of service hours", func(t *testing.T) {
+		input := validRequestInput(building.ID, "All day", 20)
+		input.StartTime, input.EndTime = "07:30", "22:00"
+		w := doRequest(r, http.MethodPost, "/api/requests", input)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("rejects times outside service hours", func(t *testing.T) {
+		cases := [][2]string{
+			{"07:00", "09:00"}, // starts before staff arrive
+			{"07:20", "08:00"},
+			{"21:00", "22:30"}, // ends after staff leave
+			{"22:30", "23:00"},
+		}
+		for _, tc := range cases {
+			input := validRequestInput(building.ID, "Whatever", 10)
+			input.StartTime, input.EndTime = tc[0], tc[1]
+			w := doRequest(r, http.MethodPost, "/api/requests", input)
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("expected 400 for %s-%s, got %d: %s", tc[0], tc[1], w.Code, w.Body.String())
+			}
+		}
+	})
+
 	t.Run("rejects an invalid date", func(t *testing.T) {
 		input := validRequestInput(building.ID, "Whatever", 10)
 		input.FirstDateNeeded = "not-a-date"
@@ -146,7 +194,7 @@ func TestRequestGet(t *testing.T) {
 
 	t.Run("returns the request with its building and assignments preloaded", func(t *testing.T) {
 		group := seedGroup(t, "Cow Cart", false, false)
-		seedEquipment(t, group.ID, "Cow Cart A", false, false)
+		seedEquipment(t, group.ID, building.ID, "Cow Cart A", false, false)
 		if w := doRequest(r, http.MethodPost, fmt.Sprintf("/api/requests/%d/equipment", request.ID),
 			requestedEquipmentInput{GroupID: group.ID}); w.Code != http.StatusCreated {
 			t.Fatalf("failed to seed an assignment: %s", w.Body.String())
@@ -223,7 +271,7 @@ func TestRequestDelete(t *testing.T) {
 		endTime:    clockTime(10, 0),
 	})
 	group := seedGroup(t, "Cow Cart", false, false)
-	seedEquipment(t, group.ID, "Cow Cart A", false, false)
+	seedEquipment(t, group.ID, building.ID, "Cow Cart A", false, false)
 	if w := doRequest(r, http.MethodPost, fmt.Sprintf("/api/requests/%d/equipment", request.ID),
 		requestedEquipmentInput{GroupID: group.ID}); w.Code != http.StatusCreated {
 		t.Fatalf("failed to seed an assignment: %s", w.Body.String())
