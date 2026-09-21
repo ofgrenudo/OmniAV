@@ -24,6 +24,7 @@ func (h *EquipmentHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	{
 		equipment.GET("", h.List)
 		equipment.GET("/:id", h.Get)
+		equipment.GET("/:id/bookings", h.Bookings)
 		equipment.POST("", h.Create)
 		equipment.PUT("/:id", h.Update)
 		equipment.DELETE("/:id", h.Delete)
@@ -36,7 +37,10 @@ type equipmentInput struct {
 	Disabled    bool
 	Archived    bool
 	GroupID     uint `binding:"required"`
-	BuildingID  *uint
+	// BuildingID is required: every unit has a permanent home building. There is no
+	// "unassigned / central storage" state; a move is an admin edit that swaps one building
+	// for another.
+	BuildingID  uint `binding:"required"`
 }
 
 var equipmentSortColumns = map[string]string{
@@ -61,11 +65,7 @@ func (h *EquipmentHandler) equipmentGroupExists(groupID uint) (bool, error) {
 // buildingExists validates a client-supplied BuildingID on create/update, same rationale as
 // equipmentGroupExists: a 400, since the building isn't the resource the URL identifies.
 func (h *EquipmentHandler) buildingExists(buildingID uint) (bool, error) {
-	var count int64
-	if err := h.DB.Model(&models.Building{}).Where("id = ?", buildingID).Count(&count).Error; err != nil {
-		return false, err
-	}
-	return count > 0, nil
+	return buildingExists(h.DB, buildingID)
 }
 
 func (h *EquipmentHandler) List(c *gin.Context) {
@@ -168,6 +168,82 @@ func (h *EquipmentHandler) Get(c *gin.Context) {
 	c.JSON(http.StatusOK, equipment)
 }
 
+// bookingEntry is one request this unit is assigned to — enough to answer "where was this cart
+// before, and where does it go next" without a second round trip per request.
+type bookingEntry struct {
+	RequestedEquipmentID uint   `json:"requestedEquipmentId"`
+	RequestID            uint   `json:"requestId"`
+	RequestName          string `json:"requestName"`
+	GroupID              uint   `json:"groupId"`
+	BuildingID           uint   `json:"buildingId"`
+	BuildingName         string `json:"buildingName"`
+	Room                 string `json:"room"`
+	FirstDateNeeded      string `json:"firstDateNeeded"`
+	DaysOfWeek           string `json:"daysOfWeek"`
+	NumberOfWeeks        int    `json:"numberOfWeeks"`
+	StartTime            string `json:"startTime"`
+	EndTime              string `json:"endTime"`
+}
+
+// Bookings lists every request this unit is assigned to, oldest first. Ordering is by the
+// request's first date and start time — the order the unit physically moves between rooms — so a
+// client can show any booking together with the one immediately before it.
+func (h *EquipmentHandler) Bookings(c *gin.Context) {
+	id, err := parseIDParam(c)
+	if err != nil {
+		badRequest(c, "invalid equipment id")
+		return
+	}
+
+	var equipment models.Equipment
+	if err := h.DB.First(&equipment, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			notFound(c, "equipment not found")
+			return
+		}
+		internalError(c, err)
+		return
+	}
+
+	var assigned []models.RequestedEquipment
+	if err := h.DB.
+		Preload("Request").
+		Preload("Request.Building").
+		Joins("JOIN requests ON requests.id = requested_equipments.request_id").
+		Where("requested_equipments.equipment_id = ?", id).
+		Order("requests.first_date_needed ASC, requests.start_time ASC, requests.id ASC").
+		Find(&assigned).Error; err != nil {
+		internalError(c, err)
+		return
+	}
+
+	entries := make([]bookingEntry, 0, len(assigned))
+	for _, re := range assigned {
+		if re.Request == nil {
+			continue
+		}
+		entry := bookingEntry{
+			RequestedEquipmentID: re.ID,
+			RequestID:            re.RequestID,
+			RequestName:          re.Request.Name,
+			GroupID:              re.GroupID,
+			BuildingID:           re.Request.BuildingID,
+			Room:                 re.Request.Room,
+			FirstDateNeeded:      re.Request.FirstDateNeeded.UTC().Format(dateOnlyLayout),
+			DaysOfWeek:           re.Request.DaysOfWeek.String(),
+			NumberOfWeeks:        re.Request.NumberOfWeeks,
+			StartTime:            re.Request.StartTime.UTC().Format(clockLayout),
+			EndTime:              re.Request.EndTime.UTC().Format(clockLayout),
+		}
+		if re.Request.Building != nil {
+			entry.BuildingName = re.Request.Building.Name
+		}
+		entries = append(entries, entry)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"equipmentId": equipment.ID, "equipmentName": equipment.Name, "data": entries})
+}
+
 func (h *EquipmentHandler) Create(c *gin.Context) {
 	var input equipmentInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -191,16 +267,14 @@ func (h *EquipmentHandler) Create(c *gin.Context) {
 		return
 	}
 
-	if input.BuildingID != nil {
-		exists, err := h.buildingExists(*input.BuildingID)
-		if err != nil {
-			internalError(c, err)
-			return
-		}
-		if !exists {
-			badRequest(c, "building not found")
-			return
-		}
+	exists, err = h.buildingExists(input.BuildingID)
+	if err != nil {
+		internalError(c, err)
+		return
+	}
+	if !exists {
+		badRequest(c, "building not found")
+		return
 	}
 
 	equipment := models.Equipment{
@@ -259,16 +333,14 @@ func (h *EquipmentHandler) Update(c *gin.Context) {
 		return
 	}
 
-	if input.BuildingID != nil {
-		exists, err := h.buildingExists(*input.BuildingID)
-		if err != nil {
-			internalError(c, err)
-			return
-		}
-		if !exists {
-			badRequest(c, "building not found")
-			return
-		}
+	exists, err = h.buildingExists(input.BuildingID)
+	if err != nil {
+		internalError(c, err)
+		return
+	}
+	if !exists {
+		badRequest(c, "building not found")
+		return
 	}
 
 	equipment.Name = input.Name
