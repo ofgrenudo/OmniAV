@@ -114,9 +114,11 @@ func seedGroup(t *testing.T, name string, disabled, archived bool) models.Equipm
 	return g
 }
 
-func seedEquipment(t *testing.T, groupID uint, name string, disabled, archived bool) models.Equipment {
+// seedEquipment stocks a unit in buildingID. Every unit has a permanent home, so buildingID
+// is required — there is no "central storage" seeder anymore.
+func seedEquipment(t *testing.T, groupID, buildingID uint, name string, disabled, archived bool) models.Equipment {
 	t.Helper()
-	e := models.Equipment{Name: name, GroupID: groupID, Disabled: disabled, Archived: archived}
+	e := models.Equipment{Name: name, GroupID: groupID, BuildingID: buildingID, Disabled: disabled, Archived: archived}
 	if err := testDB.Create(&e).Error; err != nil {
 		t.Fatalf("seed equipment %q: %v", name, err)
 	}
@@ -251,8 +253,8 @@ func TestCreateRequestedEquipment(t *testing.T) {
 	resetTables(t)
 	building := seedBuilding(t)
 	group := seedGroup(t, "Cow Cart", false, false)
-	seedEquipment(t, group.ID, "Cow Cart B", false, false)
-	seedEquipment(t, group.ID, "Cow Cart A", false, false)
+	seedEquipment(t, group.ID, building.ID, "Cow Cart B", false, false)
+	seedEquipment(t, group.ID, building.ID, "Cow Cart A", false, false)
 
 	request := seedRequest(t, requestOpts{
 		buildingID: building.ID,
@@ -308,9 +310,9 @@ func TestCreateRequestedEquipment_SkipsDisabledAndArchived(t *testing.T) {
 	resetTables(t)
 	building := seedBuilding(t)
 	group := seedGroup(t, "Cow Cart", false, false)
-	seedEquipment(t, group.ID, "Cow Cart A (disabled)", true, false)
-	seedEquipment(t, group.ID, "Cow Cart B (archived)", false, true)
-	seedEquipment(t, group.ID, "Cow Cart C", false, false)
+	seedEquipment(t, group.ID, building.ID, "Cow Cart A (disabled)", true, false)
+	seedEquipment(t, group.ID, building.ID, "Cow Cart B (archived)", false, true)
+	seedEquipment(t, group.ID, building.ID, "Cow Cart C", false, false)
 
 	request := seedRequest(t, requestOpts{
 		buildingID: building.ID,
@@ -382,7 +384,7 @@ func TestCreateRequestedEquipment_GroupUnavailable(t *testing.T) {
 
 	t.Run("disabled group", func(t *testing.T) {
 		group := seedGroup(t, "Disabled Group", true, false)
-		seedEquipment(t, group.ID, "Unit A", false, false)
+		seedEquipment(t, group.ID, building.ID, "Unit A", false, false)
 
 		_, err := CreateRequestedEquipment(testDB, request.ID, group.ID)
 		if !errors.Is(err, ErrEquipmentGroupUnavailable) {
@@ -392,7 +394,7 @@ func TestCreateRequestedEquipment_GroupUnavailable(t *testing.T) {
 
 	t.Run("archived group", func(t *testing.T) {
 		group := seedGroup(t, "Archived Group", false, true)
-		seedEquipment(t, group.ID, "Unit A", false, false)
+		seedEquipment(t, group.ID, building.ID, "Unit A", false, false)
 
 		_, err := CreateRequestedEquipment(testDB, request.ID, group.ID)
 		if !errors.Is(err, ErrEquipmentGroupUnavailable) {
@@ -403,8 +405,9 @@ func TestCreateRequestedEquipment_GroupUnavailable(t *testing.T) {
 
 func TestCreateRequestedEquipment_RequestNotFound(t *testing.T) {
 	resetTables(t)
+	building := seedBuilding(t)
 	group := seedGroup(t, "Cow Cart", false, false)
-	seedEquipment(t, group.ID, "Cow Cart A", false, false)
+	seedEquipment(t, group.ID, building.ID, "Cow Cart A", false, false)
 
 	_, err := CreateRequestedEquipment(testDB, 999999, group.ID)
 	if !errors.Is(err, ErrRequestNotFound) {
@@ -416,7 +419,7 @@ func TestCreateRequestedEquipment_RespectsOverlappingBookings(t *testing.T) {
 	resetTables(t)
 	building := seedBuilding(t)
 	group := seedGroup(t, "Cow Cart", false, false)
-	seedEquipment(t, group.ID, "Cow Cart A", false, false)
+	seedEquipment(t, group.ID, building.ID, "Cow Cart A", false, false)
 
 	monday := time.Date(2026, 2, 2, 0, 0, 0, 0, time.UTC)
 	firstRequest := seedRequest(t, requestOpts{
@@ -503,7 +506,7 @@ func TestCreateRequestedEquipment_ConcurrentRequestsForLastUnit(t *testing.T) {
 	resetTables(t)
 	building := seedBuilding(t)
 	group := seedGroup(t, "Cow Cart", false, false)
-	seedEquipment(t, group.ID, "Cow Cart A", false, false)
+	seedEquipment(t, group.ID, building.ID, "Cow Cart A", false, false)
 
 	monday := time.Date(2026, 2, 2, 0, 0, 0, 0, time.UTC)
 	requestA := seedRequest(t, requestOpts{
@@ -564,9 +567,9 @@ func TestAvailableCount(t *testing.T) {
 	resetTables(t)
 	building := seedBuilding(t)
 	group := seedGroup(t, "Cow Cart", false, false)
-	seedEquipment(t, group.ID, "Cow Cart A", false, false)
-	seedEquipment(t, group.ID, "Cow Cart B", false, false)
-	seedEquipment(t, group.ID, "Cow Cart C (disabled)", true, false)
+	seedEquipment(t, group.ID, building.ID, "Cow Cart A", false, false)
+	seedEquipment(t, group.ID, building.ID, "Cow Cart B", false, false)
+	seedEquipment(t, group.ID, building.ID, "Cow Cart C (disabled)", true, false)
 
 	monday := time.Date(2026, 2, 2, 0, 0, 0, 0, time.UTC)
 	existing := seedRequest(t, requestOpts{
@@ -618,7 +621,7 @@ func TestAvailableCount(t *testing.T) {
 
 	t.Run("zero for a disabled group", func(t *testing.T) {
 		disabledGroup := seedGroup(t, "Disabled Group", true, false)
-		seedEquipment(t, disabledGroup.ID, "Unit A", false, false)
+		seedEquipment(t, disabledGroup.ID, building.ID, "Unit A", false, false)
 		newRequest := seedRequest(t, requestOpts{
 			buildingID: building.ID,
 			name:       "Whatever",
@@ -633,6 +636,91 @@ func TestAvailableCount(t *testing.T) {
 		}
 		if got != 0 {
 			t.Errorf("AvailableCount = %d, want 0 for a disabled group", got)
+		}
+	})
+}
+
+func TestAvailableCount_ScopedToRequestBuilding(t *testing.T) {
+	resetTables(t)
+	building := seedBuilding(t)
+	otherBuilding := models.Building{Name: "Other Hall"}
+	if err := testDB.Create(&otherBuilding).Error; err != nil {
+		t.Fatalf("seed other building: %v", err)
+	}
+
+	group := seedGroup(t, "Cow Cart", false, false)
+	seedEquipment(t, group.ID, otherBuilding.ID, "Cow Cart A", false, false)
+
+	monday := time.Date(2026, 2, 2, 0, 0, 0, 0, time.UTC)
+	request := seedRequest(t, requestOpts{
+		buildingID: building.ID,
+		name:       "Bio Lecture",
+		firstDate:  monday,
+		startTime:  clockTime(9, 0),
+		endTime:    clockTime(10, 0),
+	})
+
+	got, err := AvailableCount(testDB, group.ID, &request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != 0 {
+		t.Errorf("AvailableCount = %d, want 0 (no units stocked in the requested building)", got)
+	}
+
+	t.Run("assignment refuses units from another building", func(t *testing.T) {
+		_, err := CreateRequestedEquipment(testDB, request.ID, group.ID)
+		if !errors.Is(err, ErrNoEquipmentAvailable) {
+			t.Fatalf("expected ErrNoEquipmentAvailable, got %v", err)
+		}
+	})
+
+	t.Run("a unit stocked in the building is available", func(t *testing.T) {
+		seedEquipment(t, group.ID, building.ID, "Cow Cart C", false, false)
+
+		got, err := AvailableCount(testDB, group.ID, &request)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != 1 {
+			t.Errorf("AvailableCount = %d, want 1 (one unit stocked in the requested building)", got)
+		}
+	})
+}
+
+func TestRequestOccursOn(t *testing.T) {
+	monday := time.Date(2026, 2, 2, 0, 0, 0, 0, time.UTC) // a Monday
+	request := models.Request{
+		FirstDateNeeded: monday,
+		StartTime:       clockTime(9, 0),
+		EndTime:         clockTime(10, 0),
+		NumberOfWeeks:   3, // monday, +7, +14
+		DaysOfWeek:      models.Monday,
+	}
+
+	cases := []struct {
+		name string
+		date time.Time
+		want bool
+	}{
+		{"first occurrence", monday, true},
+		{"middle occurrence", monday.AddDate(0, 0, 7), true},
+		{"last occurrence", monday.AddDate(0, 0, 14), true},
+		{"week after the run ends", monday.AddDate(0, 0, 21), false},
+		{"before the first date", monday.AddDate(0, 0, -7), false},
+		{"a different weekday inside the run", monday.AddDate(0, 0, 1), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := RequestOccursOn(&request, tc.date); got != tc.want {
+				t.Errorf("RequestOccursOn(%s) = %v, want %v", tc.date.Format("2006-01-02"), got, tc.want)
+			}
+		})
+	}
+
+	t.Run("nil request never occurs", func(t *testing.T) {
+		if RequestOccursOn(nil, monday) {
+			t.Error("expected false for a nil request")
 		}
 	})
 }

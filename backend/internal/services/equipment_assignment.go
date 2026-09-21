@@ -36,6 +36,21 @@ func RequestsOverlap(a, b *models.Request) bool {
 	return timeOfDayOverlaps(a.StartTime, a.EndTime, b.StartTime, b.EndTime)
 }
 
+// RequestOccursOn reports whether a request actually happens on the given calendar day. A request
+// recurs weekly on one weekday, so it lands on date only when the weekday matches and date falls
+// inside the run of weekly occurrences.
+func RequestOccursOn(r *models.Request, date time.Time) bool {
+	if r == nil {
+		return false
+	}
+	day := dateOnly(date)
+	if r.DaysOfWeek != models.FromGoWeekday(day.Weekday()) {
+		return false
+	}
+	start, end := occurrenceRange(r)
+	return !day.Before(start) && !day.After(end)
+}
+
 func occurrenceRange(r *models.Request) (time.Time, time.Time) {
 	start := dateOnly(r.FirstDateNeeded)
 	weeks := r.NumberOfWeeks
@@ -117,7 +132,7 @@ func assignEquipment(tx *gorm.DB, groupID uint, request *models.Request) (*model
 		return nil, ErrEquipmentGroupUnavailable
 	}
 
-	candidates, err := loadCandidates(tx, groupID, true)
+	candidates, err := loadCandidates(tx, groupID, request.BuildingID, true)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +166,7 @@ func AvailableCount(db *gorm.DB, groupID uint, request *models.Request) (int, er
 		return 0, nil
 	}
 
-	candidates, err := loadCandidates(db, groupID, false)
+	candidates, err := loadCandidates(db, groupID, request.BuildingID, false)
 	if err != nil {
 		return 0, err
 	}
@@ -184,8 +199,15 @@ func loadGroup(tx *gorm.DB, groupID uint) (*models.EquipmentGroup, error) {
 	return &group, nil
 }
 
-func loadCandidates(tx *gorm.DB, groupID uint, lock bool) ([]models.Equipment, error) {
-	q := tx.Where("group_id = ? AND disabled = ? AND archived = ?", groupID, false, false).Order("name ASC")
+// loadCandidates lists the units eligible to serve a request. Every unit has a permanent home
+// building (Equipment.BuildingID is NOT NULL), so a request can only ever be filled from units
+// stocked in the request's building — units living in a different building are not offered or
+// assigned, and there is no "central storage" fallback.
+func loadCandidates(tx *gorm.DB, groupID uint, buildingID uint, lock bool) ([]models.Equipment, error) {
+	q := tx.Where(
+		"group_id = ? AND building_id = ? AND disabled = ? AND archived = ?",
+		groupID, buildingID, false, false,
+	).Order("name ASC")
 	if lock {
 		q = q.Clauses(clause.Locking{Strength: "UPDATE"})
 	}
