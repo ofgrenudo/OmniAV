@@ -157,6 +157,10 @@ func (h *RequestHandler) Create(c *gin.Context) {
 		badRequest(c, "room must not be blank")
 		return
 	}
+	if err := validateRoom(input.Room); err != nil {
+		badRequest(c, err.Error())
+		return
+	}
 
 	firstDate, err := parseDateOnly(input.FirstDateNeeded)
 	if err != nil {
@@ -175,6 +179,14 @@ func (h *RequestHandler) Create(c *gin.Context) {
 	}
 	if !endTime.After(startTime) {
 		badRequest(c, "endTime must be after startTime")
+		return
+	}
+	if !withinServiceHours(startTime) {
+		badRequest(c, serviceHoursError("startTime").Error())
+		return
+	}
+	if !withinServiceHours(endTime) {
+		badRequest(c, serviceHoursError("endTime").Error())
 		return
 	}
 
