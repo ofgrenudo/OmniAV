@@ -16,9 +16,11 @@ func seedGroup(t *testing.T, name string, disabled, archived bool) models.Equipm
 	return g
 }
 
-func seedEquipment(t *testing.T, groupID uint, name string, disabled, archived bool) models.Equipment {
+// seedEquipment stocks a unit in buildingID. Every unit has a permanent home building, so
+// buildingID is required — there is no "central storage" seeder.
+func seedEquipment(t *testing.T, groupID, buildingID uint, name string, disabled, archived bool) models.Equipment {
 	t.Helper()
-	e := models.Equipment{Name: name, GroupID: groupID, Disabled: disabled, Archived: archived}
+	e := models.Equipment{Name: name, GroupID: groupID, BuildingID: buildingID, Disabled: disabled, Archived: archived}
 	if err := testDB.Create(&e).Error; err != nil {
 		t.Fatalf("seed equipment %q: %v", name, err)
 	}
