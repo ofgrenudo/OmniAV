@@ -11,6 +11,7 @@ import {
 } from '../../services/equipmentGroupsApi';
 import { errorMessage } from '../../utils/apiError';
 import EquipmentUnitsPanel from './EquipmentUnitsPanel';
+import EquipmentTrackPanel from './EquipmentTrackPanel';
 import './Inventory.css';
 
 type ArchivedFilter = 'active' | 'archived' | 'all';
@@ -71,7 +72,9 @@ const Inventory: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // A row can expand into either its units or its tracking chart, never both at once.
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [trackedId, setTrackedId] = useState<number | null>(null);
 
   useEffect(() => {
     const timeout = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -175,6 +178,12 @@ const Inventory: React.FC = () => {
 
   const toggleExpanded = (groupId: number) => {
     setExpandedId((current) => (current === groupId ? null : groupId));
+    setTrackedId(null);
+  };
+
+  const toggleTracked = (groupId: number) => {
+    setTrackedId((current) => (current === groupId ? null : groupId));
+    setExpandedId(null);
   };
 
   const sortIndicator = (column: EquipmentGroupSortColumn) => {
@@ -316,6 +325,7 @@ const Inventory: React.FC = () => {
                 {groups.map((group) => {
                   const status = groupStatus(group);
                   const isExpanded = expandedId === group.id;
+                  const isTracked = trackedId === group.id;
                   return (
                     <React.Fragment key={group.id}>
                       <tr>
@@ -332,6 +342,13 @@ const Inventory: React.FC = () => {
                             onClick={() => toggleExpanded(group.id)}
                           >
                             {isExpanded ? 'Hide Units' : 'Units'}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn--secondary btn--small"
+                            onClick={() => toggleTracked(group.id)}
+                          >
+                            {isTracked ? 'Hide Track' : 'Track'}
                           </button>
                           <button
                             type="button"
@@ -353,6 +370,13 @@ const Inventory: React.FC = () => {
                         <tr>
                           <td colSpan={5} className="units-panel-cell">
                             <EquipmentUnitsPanel groupId={group.id} groupName={group.name} />
+                          </td>
+                        </tr>
+                      )}
+                      {isTracked && (
+                        <tr>
+                          <td colSpan={5} className="units-panel-cell">
+                            <EquipmentTrackPanel groupId={group.id} groupName={group.name} />
                           </td>
                         </tr>
                       )}

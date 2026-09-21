@@ -153,3 +153,49 @@
   padding: 6px 12px;
   font-size: 0.82rem;
 }
+
+/* --- Unit tracking: highlight a request and the one that had the unit before it --- */
+
+.data-table__row--tracked > td {
+  background-color: rgba(0, 148, 201, 0.14);
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
+.data-table__row--tracked-previous > td {
+  background-color: rgba(207, 140, 42, 0.16);
+  box-shadow: inset 3px 0 0 var(--color-tertiary-gold);
+}
+
+.track-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.track-legend__swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+.track-legend__swatch--current {
+  background-color: var(--color-primary);
+}
+
+.track-legend__swatch--previous {
+  background-color: var(--color-tertiary-gold);
+}
+
+.track-legend__note {
+  color: var(--color-text-muted);
+}
+
+.track-legend__note--error {
+  color: var(--color-tertiary-red);
+}

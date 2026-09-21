@@ -5,7 +5,7 @@ export interface Equipment {
   disabled: boolean;
   archived: boolean;
   groupId: number;
-  buildingId: number | null;
+  buildingId: number;
   createdAt: string;
   updatedAt: string;
 }

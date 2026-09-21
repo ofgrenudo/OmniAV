@@ -1,8 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Building } from '../../../types/Building';
 import { WEEKDAYS, Weekday } from '../../../types/Weekday';
 import { WhenWhereData } from '../../../types/WhenWhereData';
-import { generateTimeOptions, isAtLeast24HoursOut, minAdvanceDate, toDateInputValue } from '../../../utils/time';
+import { ROOM_NUMBER_HINT, isValidRoomNumber, sanitizeRoomNumber } from '../../../utils/room';
+import {
+  generateTimeOptions,
+  isAtLeast24HoursOut,
+  isWithinServiceHours,
+  minSelectableDate,
+  serviceHoursLabel,
+  toDateInputValue,
+} from '../../../utils/time';
 
 interface WhenWhereStepProps {
   data: WhenWhereData;
@@ -16,11 +24,60 @@ type Errors = Partial<Record<keyof WhenWhereData, string>>;
 
 const timeOptions = generateTimeOptions();
 
+export const validateWhenWhere = (data: WhenWhereData): Errors => {
+  const errors: Errors = {};
+
+  if (!data.requestName.trim()) errors.requestName = 'Request name is required.';
+
+  if (!data.firstDate) {
+    errors.firstDate = 'First date needed is required.';
+  } else if (data.firstDate < toDateInputValue(minSelectableDate())) {
+    errors.firstDate = 'Requests must be made at least 24 hours in advance.';
+  }
+
+  if (!data.startTime) {
+    errors.startTime = 'Start time is required.';
+  } else if (!isWithinServiceHours(data.startTime)) {
+    errors.startTime = `Start time must be between ${serviceHoursLabel()}.`;
+  } else if (data.firstDate && !isAtLeast24HoursOut(data.firstDate, data.startTime)) {
+    errors.startTime = 'Requests must be made at least 24 hours in advance.';
+  }
+
+  if (!data.endTime) {
+    errors.endTime = 'End time is required.';
+  } else if (!isWithinServiceHours(data.endTime)) {
+    errors.endTime = `End time must be between ${serviceHoursLabel()}.`;
+  } else if (data.startTime && data.endTime <= data.startTime) {
+    errors.endTime = 'End time must be after start time.';
+  }
+
+  if (!data.weeks || data.weeks < 1) errors.weeks = 'Enter at least 1 week.';
+  if (data.weeks > 52) errors.weeks = 'Enter no more than 52 weeks.';
+  if (data.days.length === 0) errors.days = 'Select at least one day of the week.';
+  if (!data.buildingId) errors.buildingId = 'Building is required.';
+
+  if (!data.roomNumber.trim()) {
+    errors.roomNumber = 'Room number is required.';
+  } else if (!isValidRoomNumber(data.roomNumber)) {
+    errors.roomNumber = ROOM_NUMBER_HINT;
+  }
+
+  return errors;
+};
+
 const WhenWhereStep: React.FC<WhenWhereStepProps> = ({ data, buildings, onChange, onContinue, onCancel }) => {
-  const [errors, setErrors] = useState<Errors>({});
-  const minDate = useMemo(() => toDateInputValue(minAdvanceDate()), []);
+  const [touched, setTouched] = useState<Partial<Record<keyof WhenWhereData, boolean>>>({});
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const minDate = toDateInputValue(minSelectableDate());
+
+  const errors = validateWhenWhere(data);
+  // A field's error stays hidden until the user has touched it (or tried to continue), so the form
+  // doesn't open covered in complaints about fields they haven't reached yet.
+  const errorFor = (field: keyof WhenWhereData): string | undefined =>
+    submitAttempted || touched[field] ? errors[field] : undefined;
 
   const update = <K extends keyof WhenWhereData>(field: K, value: WhenWhereData[K]) => {
+    setTouched((prev) => ({ ...prev, [field]: true }));
     onChange({ ...data, [field]: value });
   };
 
@@ -29,35 +86,21 @@ const WhenWhereStep: React.FC<WhenWhereStepProps> = ({ data, buildings, onChange
     update('days', days);
   };
 
-  const validate = (): boolean => {
-    const next: Errors = {};
-    if (!data.requestName.trim()) next.requestName = 'Request name is required.';
-    if (!data.firstDate) next.firstDate = 'First date needed is required.';
-    if (!data.startTime) next.startTime = 'Start time is required.';
-    if (!data.endTime) next.endTime = 'End time is required.';
-    if (data.startTime && data.endTime && data.endTime <= data.startTime) {
-      next.endTime = 'End time must be after start time.';
-    }
-    if (data.firstDate && data.startTime && !isAtLeast24HoursOut(data.firstDate, data.startTime)) {
-      next.firstDate = 'Requests must be made at least 24 hours in advance.';
-    }
-    if (!data.weeks || data.weeks < 1) next.weeks = 'Enter at least 1 week.';
-    if (data.days.length === 0) next.days = 'Select at least one day of the week.';
-    if (!data.buildingId) next.buildingId = 'Building is required.';
-    if (!data.roomNumber.trim()) next.roomNumber = 'Room number is required.';
-
-    setErrors(next);
-    return Object.keys(next).length === 0;
-  };
-
   const handleContinue = () => {
-    if (validate()) onContinue();
+    setSubmitAttempted(true);
+    if (Object.keys(errors).length === 0) onContinue();
   };
+
+  // Times that fall inside the 24-hour notice window on the chosen date can't be honored, so they
+  // aren't selectable at all rather than being rejected after the fact.
+  const startDisabled = (time: string): boolean => Boolean(data.firstDate) && !isAtLeast24HoursOut(data.firstDate, time);
 
   return (
     <div className="request-step">
       <h2 className="request-step__title">When &amp; Where</h2>
-      <p className="request-step__subtitle">Requests must be made at least 24 hours in advance.</p>
+      <p className="request-step__subtitle">
+        Requests must be made at least 24 hours in advance, for times between {serviceHoursLabel()}.
+      </p>
 
       <div className="form-field">
         <label htmlFor="requestName">Request Name *</label>
@@ -66,10 +109,11 @@ const WhenWhereStep: React.FC<WhenWhereStepProps> = ({ data, buildings, onChange
           type="text"
           value={data.requestName}
           onChange={(e) => update('requestName', e.target.value)}
+          onBlur={() => setTouched((prev) => ({ ...prev, requestName: true }))}
           placeholder="e.g. BIO 101 Lecture, Fall Career Fair"
         />
         <p className="form-field__hint">Tip: use the course name or event name.</p>
-        {errors.requestName && <p className="form-field__error">{errors.requestName}</p>}
+        {errorFor('requestName') && <p className="form-field__error">{errorFor('requestName')}</p>}
       </div>
 
       <div className="form-field">
@@ -80,8 +124,10 @@ const WhenWhereStep: React.FC<WhenWhereStepProps> = ({ data, buildings, onChange
           min={minDate}
           value={data.firstDate}
           onChange={(e) => update('firstDate', e.target.value)}
+          onBlur={() => setTouched((prev) => ({ ...prev, firstDate: true }))}
         />
-        {errors.firstDate && <p className="form-field__error">{errors.firstDate}</p>}
+        <p className="form-field__hint">Earliest bookable date: {minDate}.</p>
+        {errorFor('firstDate') && <p className="form-field__error">{errorFor('firstDate')}</p>}
       </div>
 
       <div className="form-row">
@@ -90,12 +136,12 @@ const WhenWhereStep: React.FC<WhenWhereStepProps> = ({ data, buildings, onChange
           <select id="startTime" value={data.startTime} onChange={(e) => update('startTime', e.target.value)}>
             <option value="">Select time</option>
             {timeOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
+              <option key={opt.value} value={opt.value} disabled={startDisabled(opt.value)}>
                 {opt.label}
               </option>
             ))}
           </select>
-          {errors.startTime && <p className="form-field__error">{errors.startTime}</p>}
+          {errorFor('startTime') && <p className="form-field__error">{errorFor('startTime')}</p>}
         </div>
 
         <div className="form-field">
@@ -103,12 +149,12 @@ const WhenWhereStep: React.FC<WhenWhereStepProps> = ({ data, buildings, onChange
           <select id="endTime" value={data.endTime} onChange={(e) => update('endTime', e.target.value)}>
             <option value="">Select time</option>
             {timeOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
+              <option key={opt.value} value={opt.value} disabled={Boolean(data.startTime) && opt.value <= data.startTime}>
                 {opt.label}
               </option>
             ))}
           </select>
-          {errors.endTime && <p className="form-field__error">{errors.endTime}</p>}
+          {errorFor('endTime') && <p className="form-field__error">{errorFor('endTime')}</p>}
         </div>
 
         <div className="form-field">
@@ -120,11 +166,12 @@ const WhenWhereStep: React.FC<WhenWhereStepProps> = ({ data, buildings, onChange
             max={52}
             value={data.weeks}
             onChange={(e) => update('weeks', Number(e.target.value))}
+            onBlur={() => setTouched((prev) => ({ ...prev, weeks: true }))}
           />
-          {errors.weeks && <p className="form-field__error">{errors.weeks}</p>}
+          {errorFor('weeks') && <p className="form-field__error">{errorFor('weeks')}</p>}
         </div>
       </div>
-      <p className="form-field__hint">Times valid 07:00–23:30 in 10-minute intervals.</p>
+      <p className="form-field__hint">Times available {serviceHoursLabel()} in 10-minute intervals.</p>
 
       <div className="form-field">
         <span className="form-field__label-text">Days of the Week</span>
@@ -140,7 +187,7 @@ const WhenWhereStep: React.FC<WhenWhereStepProps> = ({ data, buildings, onChange
             </button>
           ))}
         </div>
-        {errors.days && <p className="form-field__error">{errors.days}</p>}
+        {errorFor('days') && <p className="form-field__error">{errorFor('days')}</p>}
       </div>
 
       <div className="form-row">
@@ -154,7 +201,7 @@ const WhenWhereStep: React.FC<WhenWhereStepProps> = ({ data, buildings, onChange
               </option>
             ))}
           </select>
-          {errors.buildingId && <p className="form-field__error">{errors.buildingId}</p>}
+          {errorFor('buildingId') && <p className="form-field__error">{errorFor('buildingId')}</p>}
         </div>
 
         <div className="form-field">
@@ -162,11 +209,14 @@ const WhenWhereStep: React.FC<WhenWhereStepProps> = ({ data, buildings, onChange
           <input
             id="roomNumber"
             type="text"
+            inputMode="text"
             value={data.roomNumber}
-            onChange={(e) => update('roomNumber', e.target.value)}
+            onChange={(e) => update('roomNumber', sanitizeRoomNumber(e.target.value))}
+            onBlur={() => setTouched((prev) => ({ ...prev, roomNumber: true }))}
             placeholder="123a"
           />
-          {errors.roomNumber && <p className="form-field__error">{errors.roomNumber}</p>}
+          <p className="form-field__hint">{ROOM_NUMBER_HINT}</p>
+          {errorFor('roomNumber') && <p className="form-field__error">{errorFor('roomNumber')}</p>}
         </div>
       </div>
 

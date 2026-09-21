@@ -39,12 +39,16 @@ const NewRequest: React.FC = () => {
   useEffect(() => {
     if (currentStep !== 2) return;
     if (!whenWhere.firstDate || !whenWhere.startTime || !whenWhere.endTime) return;
+    if (!whenWhere.buildingId) return;
 
+    const buildingId = Number(whenWhere.buildingId);
     let cancelled = false;
     setEquipmentLoading(true);
     setEquipmentError(null);
 
-    listEquipmentGroups({ pageSize: 100, sort: 'name', order: 'asc', archived: false, disabled: false })
+    // Both calls are scoped to the selected building: the list drops groups with no units stocked
+    // here, and availability counts only the units this room could actually receive.
+    listEquipmentGroups({ pageSize: 100, sort: 'name', order: 'asc', archived: false, disabled: false, buildingId })
       .then((result) =>
         Promise.all(
           result.data.map(async (group) => {
@@ -53,6 +57,7 @@ const NewRequest: React.FC = () => {
               startTime: whenWhere.startTime,
               endTime: whenWhere.endTime,
               weeks: whenWhere.weeks,
+              buildingId,
             });
             return { id: group.id, name: group.name, available };
           })
@@ -61,6 +66,10 @@ const NewRequest: React.FC = () => {
       .then((items) => {
         if (cancelled) return;
         setEquipment(items);
+        // Going back and switching buildings can leave selections for groups that aren't stocked
+        // in the new one; drop those instead of carrying them into the submitted request.
+        const availableIds = new Set(items.map((item) => item.id));
+        setSelectedEquipment((prev) => prev.filter((s) => availableIds.has(s.itemId)));
       })
       .catch((err) => {
         if (cancelled) return;

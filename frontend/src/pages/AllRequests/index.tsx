@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Request } from '../../types/Request';
 import { deleteRequest, getRequest, listRequests, unassignEquipment } from '../../services/requestsApi';
+import { EquipmentBooking, listEquipmentBookings } from '../../services/equipmentApi';
 import { errorMessage } from '../../utils/apiError';
 import { to12Hour } from '../../utils/time';
 
@@ -14,6 +15,17 @@ const timeOfDay = (iso: string): string => {
   const match = iso.match(/T(\d{2}):(\d{2})/);
   return match ? to12Hour(`${match[1]}:${match[2]}`) : iso;
 };
+
+interface TrackedUnit {
+  requestedEquipmentId: number;
+  equipmentId: number;
+  equipmentName: string;
+  requestId: number;
+}
+
+const bookingSummary = (booking: EquipmentBooking): string =>
+  `${booking.buildingName || `#${booking.buildingId}`} · Room ${booking.room} · ` +
+  `${booking.firstDateNeeded} (${booking.daysOfWeek}) ${to12Hour(booking.startTime)}–${to12Hour(booking.endTime)}`;
 
 const AllRequests: React.FC = () => {
   const [requests, setRequests] = useState<Request[]>([]);
@@ -33,6 +45,13 @@ const AllRequests: React.FC = () => {
   const [expandedError, setExpandedError] = useState<string | null>(null);
 
   const [confirmingCancelId, setConfirmingCancelId] = useState<number | null>(null);
+
+  // Tracking a unit: which assignment is selected, plus that unit's full booking history so we can
+  // point at where it was immediately before this request.
+  const [tracked, setTracked] = useState<TrackedUnit | null>(null);
+  const [trackedBookings, setTrackedBookings] = useState<EquipmentBooking[]>([]);
+  const [trackLoading, setTrackLoading] = useState(false);
+  const [trackError, setTrackError] = useState<string | null>(null);
 
   useEffect(() => {
     const timeout = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -83,6 +102,7 @@ const AllRequests: React.FC = () => {
   };
 
   const toggleExpanded = (id: number) => {
+    setTracked(null);
     if (expandedId === id) {
       setExpandedId(null);
       setExpandedRequest(null);
@@ -91,6 +111,57 @@ const AllRequests: React.FC = () => {
     setExpandedId(id);
     setExpandedRequest(null);
     loadExpanded(id);
+  };
+
+  const toggleTracked = (unit: TrackedUnit) => {
+    setTracked((current) => (current?.requestedEquipmentId === unit.requestedEquipmentId ? null : unit));
+  };
+
+  useEffect(() => {
+    if (tracked === null) {
+      setTrackedBookings([]);
+      setTrackError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setTrackLoading(true);
+    setTrackError(null);
+
+    listEquipmentBookings(tracked.equipmentId)
+      .then((result) => {
+        if (!cancelled) setTrackedBookings(result.data);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setTrackedBookings([]);
+        setTrackError(errorMessage(err, 'Failed to load this unit’s booking history.'));
+      })
+      .finally(() => {
+        if (!cancelled) setTrackLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tracked]);
+
+  // Bookings come back oldest first, so the entry before the tracked one is where this unit was
+  // last used — that request gets highlighted alongside the current one.
+  const { currentBooking, previousBooking } = useMemo(() => {
+    if (tracked === null) return { currentBooking: null, previousBooking: null };
+    const index = trackedBookings.findIndex((b) => b.requestId === tracked.requestId);
+    return {
+      currentBooking: index >= 0 ? trackedBookings[index] : null,
+      previousBooking: index > 0 ? trackedBookings[index - 1] : null,
+    };
+  }, [tracked, trackedBookings]);
+
+  const rowHighlight = (requestId: number): string => {
+    if (tracked === null) return '';
+    if (currentBooking?.requestId === requestId) return ' data-table__row--tracked';
+    if (previousBooking?.requestId === requestId) return ' data-table__row--tracked-previous';
+    return '';
   };
 
   const handleUnassign = async (requestId: number, requestedEquipmentId: number) => {
@@ -148,6 +219,26 @@ const AllRequests: React.FC = () => {
         </div>
       </div>
 
+      {tracked !== null && (
+        <p className="track-legend">
+          Tracking <strong>{tracked.equipmentName}</strong>:{' '}
+          <span className="track-legend__swatch track-legend__swatch--current" /> this request
+          {trackError !== null && <span className="track-legend__note--error">{trackError}</span>}
+          {trackError === null && trackLoading && <span>· loading booking history…</span>}
+          {trackError === null && !trackLoading && previousBooking && (
+            <>
+              {' · '}
+              <span className="track-legend__swatch track-legend__swatch--previous" /> where it was before:{' '}
+              {previousBooking.requestName} — {bookingSummary(previousBooking)}
+              {!requests.some((r) => r.id === previousBooking.requestId) && (
+                <span className="track-legend__note">(not on this page)</span>
+              )}
+            </>
+          )}
+          {trackError === null && !trackLoading && !previousBooking && <span>· no earlier booking for this unit</span>}
+        </p>
+      )}
+
       {error !== null && <p className="admin-page__status admin-page__status--error">{error}</p>}
       {error === null && loading && <p className="admin-page__status">Loading requests…</p>}
       {error === null && !loading && requests.length === 0 && (
@@ -175,7 +266,7 @@ const AllRequests: React.FC = () => {
                   const isConfirming = confirmingCancelId === request.id;
                   return (
                     <React.Fragment key={request.id}>
-                      <tr>
+                      <tr className={`${rowHighlight(request.id).trim()}`}>
                         <td>{request.name}</td>
                         <td>{request.building?.name ?? `#${request.buildingId}`}</td>
                         <td>{request.room}</td>
@@ -244,21 +335,40 @@ const AllRequests: React.FC = () => {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {expandedRequest.requestedEquipment.map((entry) => (
-                                      <tr key={entry.id}>
-                                        <td>{entry.group?.name ?? `#${entry.groupId}`}</td>
-                                        <td>{entry.equipment?.name ?? `#${entry.equipmentId}`}</td>
-                                        <td>
-                                          <button
-                                            type="button"
-                                            className="btn btn--secondary btn--small"
-                                            onClick={() => handleUnassign(request.id, entry.id)}
-                                          >
-                                            Remove
-                                          </button>
-                                        </td>
-                                      </tr>
-                                    ))}
+                                    {expandedRequest.requestedEquipment.map((entry) => {
+                                      const unitName = entry.equipment?.name ?? `#${entry.equipmentId}`;
+                                      const isTracked = tracked?.requestedEquipmentId === entry.id;
+                                      return (
+                                        <tr key={entry.id}>
+                                          <td>{entry.group?.name ?? `#${entry.groupId}`}</td>
+                                          <td>{unitName}</td>
+                                          <td className="data-table__actions">
+                                            <button
+                                              type="button"
+                                              className="btn btn--secondary btn--small"
+                                              title={`Highlight this request and where ${unitName} was before it`}
+                                              onClick={() =>
+                                                toggleTracked({
+                                                  requestedEquipmentId: entry.id,
+                                                  equipmentId: entry.equipmentId,
+                                                  equipmentName: unitName,
+                                                  requestId: request.id,
+                                                })
+                                              }
+                                            >
+                                              {isTracked ? 'Hide Track' : 'Track'}
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="btn btn--secondary btn--small"
+                                              onClick={() => handleUnassign(request.id, entry.id)}
+                                            >
+                                              Remove
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
                                   </tbody>
                                 </table>
                               ) : (

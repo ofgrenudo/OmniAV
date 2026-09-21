@@ -30,13 +30,43 @@ export interface EquipmentInput {
   disabled?: boolean;
   archived?: boolean;
   groupId: number;
-  buildingId?: number | null;
+  /**
+   * Every unit has a permanent home building. There is no "unassigned / central storage" state,
+   * so buildingId is required on create and update — a move is an admin edit that swaps one
+   * building for another.
+   */
+  buildingId: number;
 }
 
 export const listEquipment = (params: EquipmentListParams = {}): Promise<EquipmentListResult> =>
   apiRequest<EquipmentListResult>(`/equipment?${buildQueryString(params)}`);
 
 export const getEquipment = (id: number): Promise<Equipment> => apiRequest<Equipment>(`/equipment/${id}`);
+
+/** One request a unit is assigned to — the unit's movement history, oldest first. */
+export interface EquipmentBooking {
+  requestedEquipmentId: number;
+  requestId: number;
+  requestName: string;
+  groupId: number;
+  buildingId: number;
+  buildingName: string;
+  room: string;
+  firstDateNeeded: string;
+  daysOfWeek: string;
+  numberOfWeeks: number;
+  startTime: string;
+  endTime: string;
+}
+
+export interface EquipmentBookings {
+  equipmentId: number;
+  equipmentName: string;
+  data: EquipmentBooking[];
+}
+
+export const listEquipmentBookings = (id: number): Promise<EquipmentBookings> =>
+  apiRequest<EquipmentBookings>(`/equipment/${id}/bookings`);
 
 export const createEquipment = (input: EquipmentInput): Promise<Equipment> =>
   apiRequest<Equipment>('/equipment', { method: 'POST', body: JSON.stringify(input) });

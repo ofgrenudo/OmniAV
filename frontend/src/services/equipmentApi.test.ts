@@ -15,7 +15,7 @@ const sampleEquipment: Equipment = {
   disabled: false,
   archived: false,
   groupId: 5,
-  buildingId: null,
+  buildingId: 1,
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z',
 };
@@ -57,19 +57,19 @@ describe('equipmentApi', () => {
   it('posts a new unit on createEquipment', async () => {
     mockFetchResponse(sampleEquipment, 201);
 
-    const got = await createEquipment({ name: 'Cow Cart A', groupId: 5 });
+    const got = await createEquipment({ name: 'Cow Cart A', groupId: 5, buildingId: 7 });
 
     expect(got).toEqual(sampleEquipment);
     const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
     expect(url).toBe('/api/equipment');
     expect(init.method).toBe('POST');
-    expect(JSON.parse(init.body)).toEqual({ name: 'Cow Cart A', groupId: 5 });
+    expect(JSON.parse(init.body)).toEqual({ name: 'Cow Cart A', groupId: 5, buildingId: 7 });
   });
 
   it('puts an update on updateEquipment', async () => {
     mockFetchResponse({ ...sampleEquipment, groupId: 9 });
 
-    const got = await updateEquipment(1, { name: 'Cow Cart A', groupId: 9 });
+    const got = await updateEquipment(1, { name: 'Cow Cart A', groupId: 9, buildingId: 7 });
 
     expect(got.groupId).toBe(9);
     const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
@@ -92,7 +92,7 @@ describe('equipmentApi', () => {
     mockFetchResponse({ error: 'equipment group not found' }, 400);
 
     try {
-      await createEquipment({ name: 'Orphan', groupId: 999999 });
+      await createEquipment({ name: 'Orphan', groupId: 999999, buildingId: 7 });
     } catch (err) {
       expect(err).toBeInstanceOf(ApiError);
       expect((err as ApiError).status).toBe(400);

@@ -124,7 +124,7 @@ test('submits a request and assigns the selected equipment', async () => {
           disabled: false,
           archived: false,
           groupId: group.id,
-          buildingId: null,
+          buildingId: 1,
           createdAt: '',
           updatedAt: '',
         },
@@ -145,7 +145,7 @@ test('submits a request and assigns the selected equipment', async () => {
   expect(await screen.findByText('Cow Cart')).toBeInTheDocument();
   expect(mockedGroupsApi.getEquipmentGroupAvailability).toHaveBeenCalledWith(
     group.id,
-    expect.objectContaining({ startTime: '09:00', endTime: '10:00' })
+    expect.objectContaining({ startTime: '09:00', endTime: '10:00', buildingId: building.id })
   );
 
   userEvent.click(screen.getByRole('button', { name: /increase cow cart quantity/i }));
@@ -189,4 +189,28 @@ test('shows an error and still confirms the request if equipment assignment fail
 
   expect(await screen.findByText(/request submitted/i)).toBeInTheDocument();
   expect(await screen.findByText(/not all equipment could be assigned/i)).toBeInTheDocument();
+});
+
+test('only offers equipment stocked in the selected building', async () => {
+  mockedGroupsApi.listEquipmentGroups.mockResolvedValue({
+    data: [],
+    meta: { page: 1, pageSize: 100, totalItems: 0, totalPages: 0 },
+  });
+
+  render(
+    <MemoryRouter>
+      <NewRequest />
+    </MemoryRouter>
+  );
+
+  await waitFor(() => expect(mockedBuildingsApi.listBuildings).toHaveBeenCalled());
+  await fillWhenWhereStep();
+
+  await waitFor(() =>
+    expect(mockedGroupsApi.listEquipmentGroups).toHaveBeenCalledWith(
+      expect.objectContaining({ buildingId: building.id })
+    )
+  );
+  expect(await screen.findByText(/no equipment is stocked in/i)).toBeInTheDocument();
+  expect(mockedGroupsApi.getEquipmentGroupAvailability).not.toHaveBeenCalled();
 });

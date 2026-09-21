@@ -41,7 +41,9 @@ const EquipmentStep: React.FC<EquipmentStepProps> = ({
       {error && <p className="form-field__error">{error}</p>}
       {!error && loading && <p className="request-step__subtitle">Loading equipment availability…</p>}
       {!error && !loading && items.length === 0 && (
-        <p className="request-step__subtitle">No equipment groups are available to request.</p>
+        <p className="request-step__subtitle">
+          No equipment is stocked in {buildingName ? <strong>{buildingName}</strong> : 'the selected building'}.
+        </p>
       )}
 
       {!error && !loading && items.length > 0 && (

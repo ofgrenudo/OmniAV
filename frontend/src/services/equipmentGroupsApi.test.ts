@@ -4,6 +4,7 @@ import {
   createEquipmentGroup,
   getEquipmentGroup,
   getEquipmentGroupAvailability,
+  getEquipmentGroupSchedule,
   listEquipmentGroups,
   updateEquipmentGroup,
 } from './equipmentGroupsApi';
@@ -93,12 +94,13 @@ describe('equipmentGroupsApi', () => {
       startTime: '09:00',
       endTime: '10:00',
       weeks: 4,
+      buildingId: 7,
     });
 
     expect(got).toBe(3);
     const [url] = (global.fetch as jest.Mock).mock.calls[0];
     expect(url).toBe(
-      '/api/equipment-groups/1/availability?firstDate=2026-08-02&startTime=09%3A00&endTime=10%3A00&weeks=4'
+      '/api/equipment-groups/1/availability?firstDate=2026-08-02&startTime=09%3A00&endTime=10%3A00&weeks=4&buildingId=7'
     );
   });
 
@@ -113,5 +115,29 @@ describe('equipmentGroupsApi', () => {
       expect((err as ApiError).status).toBe(404);
       expect((err as ApiError).message).toBe('equipment group not found');
     }
+  });
+});
+
+describe('getEquipmentGroupSchedule', () => {
+  it('requests the given day and unwraps the entries', async () => {
+    const entry = {
+      equipmentId: 10,
+      equipmentName: 'Cow Cart A',
+      requestId: 42,
+      requestName: 'Bio Lecture',
+      buildingId: 7,
+      buildingName: 'Anna Whitten Hall',
+      room: '204',
+      startTime: '09:00',
+      endTime: '10:00',
+      comments: null,
+    };
+    mockFetchResponse({ date: '2026-08-02', data: [entry] });
+
+    const got = await getEquipmentGroupSchedule(3, '2026-08-02');
+
+    expect(got).toEqual([entry]);
+    const [url] = (global.fetch as jest.Mock).mock.calls[0];
+    expect(url).toBe('/api/equipment-groups/3/schedule?date=2026-08-02');
   });
 });

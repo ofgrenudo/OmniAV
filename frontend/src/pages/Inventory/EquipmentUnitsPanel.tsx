@@ -37,16 +37,18 @@ const toFormValues = (unit: Equipment): UnitFormValues => ({
   description: unit.description ?? '',
   disabled: unit.disabled,
   archived: unit.archived,
-  buildingId: unit.buildingId !== null ? String(unit.buildingId) : '',
+  buildingId: String(unit.buildingId),
 });
 
+// toInput requires a building — callers must validate values.buildingId is non-empty first
+// (handleSubmit enforces this).
 const toInput = (groupId: number, values: UnitFormValues): EquipmentInput => ({
   name: values.name.trim(),
   description: values.description.trim() ? values.description.trim() : null,
   disabled: values.disabled,
   archived: values.archived,
   groupId,
-  buildingId: values.buildingId ? Number(values.buildingId) : null,
+  buildingId: Number(values.buildingId),
 });
 
 const unitStatus = (unit: Equipment): { label: string; badgeClass: string } => {
@@ -80,8 +82,7 @@ const EquipmentUnitsPanel: React.FC<EquipmentUnitsPanelProps> = ({ groupId, grou
     };
   }, []);
 
-  const buildingName = (buildingId: number | null): string => {
-    if (buildingId === null) return '—';
+  const buildingName = (buildingId: number): string => {
     return buildings.find((b) => b.id === buildingId)?.name ?? `#${buildingId}`;
   };
 
@@ -129,6 +130,10 @@ const EquipmentUnitsPanel: React.FC<EquipmentUnitsPanelProps> = ({ groupId, grou
     e.preventDefault();
     if (!formValues.name.trim()) {
       setFormError('Name is required.');
+      return;
+    }
+    if (!formValues.buildingId) {
+      setFormError('Building is required — every unit has a permanent home.');
       return;
     }
 
@@ -202,13 +207,16 @@ const EquipmentUnitsPanel: React.FC<EquipmentUnitsPanelProps> = ({ groupId, grou
             />
           </div>
           <div className="form-field">
-            <label htmlFor={`unit-building-${groupId}`}>Building</label>
+            <label htmlFor={`unit-building-${groupId}`}>Building *</label>
             <select
               id={`unit-building-${groupId}`}
               value={formValues.buildingId}
               onChange={(e) => setFormValues({ ...formValues, buildingId: e.target.value })}
+              required
             >
-              <option value="">Unassigned</option>
+              <option value="" disabled>
+                Select a building…
+              </option>
               {buildings.map((building) => (
                 <option key={building.id} value={building.id}>
                   {building.name}

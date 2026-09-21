@@ -20,6 +20,8 @@ export type EquipmentGroupListParams = {
   q?: string;
   archived?: boolean;
   disabled?: boolean;
+  /** Only groups with a usable unit stocked in this building. */
+  buildingId?: number;
 };
 
 export interface EquipmentGroupInput {
@@ -34,6 +36,12 @@ export type AvailabilityParams = {
   startTime: string;
   endTime: string;
   weeks?: number;
+  /**
+   * Only count units stocked in this building. Required — every unit has a permanent home,
+   * so an availability probe without a building can't correspond to any real request. The
+   * backend rejects a missing buildingId with 400.
+   */
+  buildingId: number;
 };
 
 export const listEquipmentGroups = (params: EquipmentGroupListParams = {}): Promise<EquipmentGroupListResult> =>
@@ -50,6 +58,25 @@ export const updateEquipmentGroup = (id: number, input: EquipmentGroupInput): Pr
 
 export const archiveEquipmentGroup = (id: number): Promise<void> =>
   apiRequest<void>(`/equipment-groups/${id}`, { method: 'DELETE' });
+
+/** One unit's booking on a given day: which room it's in, when, and for which request. */
+export interface ScheduleEntry {
+  equipmentId: number;
+  equipmentName: string;
+  requestId: number;
+  requestName: string;
+  buildingId: number;
+  buildingName: string;
+  room: string;
+  startTime: string;
+  endTime: string;
+  comments: string | null;
+}
+
+export const getEquipmentGroupSchedule = (id: number, date: string): Promise<ScheduleEntry[]> =>
+  apiRequest<{ date: string; data: ScheduleEntry[] }>(
+    `/equipment-groups/${id}/schedule?${buildQueryString({ date })}`
+  ).then((res) => res.data);
 
 export const getEquipmentGroupAvailability = (id: number, params: AvailabilityParams): Promise<number> =>
   apiRequest<{ available: number }>(`/equipment-groups/${id}/availability?${buildQueryString(params)}`).then(

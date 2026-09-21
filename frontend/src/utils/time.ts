@@ -13,31 +13,50 @@ export const to12Hour = (time: string): string => {
   return `${displayHour}:${mStr} ${period}`;
 };
 
+/** Equipment can only be requested while AV staff are on site. */
+export const SERVICE_START_TIME = '07:30';
+export const SERVICE_END_TIME = '22:00';
+
+export const minutesOfDay = (time: string): number => {
+  const [h, m] = time.split(':').map(Number);
+  return h * 60 + m;
+};
+
 export const generateTimeOptions = (
-  startHour = 7,
-  endHour = 23,
-  endMinute = 30,
+  startTime = SERVICE_START_TIME,
+  endTime = SERVICE_END_TIME,
   stepMinutes = 10
 ): TimeOption[] => {
   const options: TimeOption[] = [];
-  let h = startHour;
-  let m = 0;
-  while (h < endHour || (h === endHour && m <= endMinute)) {
-    const value = `${pad(h)}:${pad(m)}`;
+  const last = minutesOfDay(endTime);
+  for (let mins = minutesOfDay(startTime); mins <= last; mins += stepMinutes) {
+    const value = `${pad(Math.floor(mins / 60))}:${pad(mins % 60)}`;
     options.push({ value, label: to12Hour(value) });
-    m += stepMinutes;
-    if (m >= 60) {
-      m -= 60;
-      h += 1;
-    }
   }
   return options;
 };
+
+export const isWithinServiceHours = (time: string): boolean =>
+  Boolean(time) && minutesOfDay(time) >= minutesOfDay(SERVICE_START_TIME) && minutesOfDay(time) <= minutesOfDay(SERVICE_END_TIME);
+
+export const serviceHoursLabel = (): string => `${to12Hour(SERVICE_START_TIME)} to ${to12Hour(SERVICE_END_TIME)}`;
 
 export const minAdvanceDate = (): Date => {
   const now = new Date();
   now.setHours(now.getHours() + 24);
   return now;
+};
+
+// minSelectableDate is the earliest date the calendar may offer: the day 24 hours out, or the day
+// after it when the 24-hour cutoff already falls past the last bookable time, since every slot on
+// that day would be rejected anyway.
+export const minSelectableDate = (): Date => {
+  const cutoff = minAdvanceDate();
+  const cutoffMinutes = cutoff.getHours() * 60 + cutoff.getMinutes();
+  if (cutoffMinutes >= minutesOfDay(SERVICE_END_TIME)) {
+    cutoff.setDate(cutoff.getDate() + 1);
+  }
+  return cutoff;
 };
 
 export const toDateInputValue = (date: Date): string => {
