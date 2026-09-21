@@ -16,9 +16,10 @@ type Equipment struct {
 	// Group is a pointer so it's omitted from JSON entirely when not Preloaded, instead of
 	// serializing as a misleading zero-value record.
 	Group *EquipmentGroup `json:"group,omitempty" gorm:"foreignKey:GroupID;references:ID"`
-	// BuildingID is a single nullable FK: a unit is stocked in at most one building at a time
-	// (nil while unassigned/in central storage), never more than one.
-	BuildingID *uint     `json:"buildingId"`
+	// BuildingID is the unit's permanent home. Every unit is stocked in exactly one building; a
+	// move is an admin edit to this column, not a side effect of a request. Non-null enforced at
+	// the DB level so orphaned "in central storage" units can't exist by accident.
+	BuildingID uint      `json:"buildingId" gorm:"not null"`
 	Building   *Building `json:"building,omitempty" gorm:"foreignKey:BuildingID;references:ID"`
 	CreatedAt  time.Time `json:"createdAt"`
 	UpdatedAt  time.Time `json:"updatedAt"`
