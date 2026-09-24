@@ -19,6 +19,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := app.Auth.Parse(); err != nil {
+		slog.Error("Failed to parse auth config", slog.Any("error", err))
+		os.Exit(1)
+	}
+
 	db, err := gorm.Open(postgres.Open(app.DB.DSN()), &gorm.Config{})
 	if err != nil {
 		slog.Error("Failed to connect to database", slog.Any("error", err))
@@ -29,6 +34,7 @@ func main() {
 		&models.Building{},
 		&models.BuildingRoom{},
 		&models.EquipmentGroup{},
+		&models.User{},
 	); err != nil {
 		slog.Error("Failed to run migrations", slog.Any("error", err))
 		os.Exit(1)
@@ -55,6 +61,12 @@ func main() {
 	r := gin.Default()
 
 	api := r.Group("/api")
+	authHandler, err := handlers.NewAuthHandler(db, app.Auth)
+	if err != nil {
+		slog.Error("Failed to configure auth", slog.Any("error", err))
+		os.Exit(1)
+	}
+	authHandler.RegisterRoutes(api)
 	handlers.NewBuildingHandler(db).RegisterRoutes(api)
 	handlers.NewEquipmentGroupHandler(db).RegisterRoutes(api)
 	handlers.NewEquipmentHandler(db).RegisterRoutes(api)
