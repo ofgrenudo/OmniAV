@@ -27,8 +27,15 @@ services:
       DB_NAME: ${DB_NAME:-omniav}
       DB_PORT: 5432
       DB_SSLMODE: disable
-    ports:
-      - "8001:8001"
+      AUTH_BASE_URL: ${AUTH_BASE_URL:-https://localhost}
+      AUTH_FRONTEND_URL: ${AUTH_FRONTEND_URL:-https://localhost}
+      AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:?set AUTH_SESSION_SECRET}
+      AUTH_SECURE_COOKIES: ${AUTH_SECURE_COOKIES:-true}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+      AZURE_TENANT: ${AZURE_TENANT:-common}
     depends_on:
       db:
         condition: service_healthy
@@ -37,10 +44,27 @@ services:
     build:
       context: ./frontend
     restart: unless-stopped
-    ports:
-      - "8000:80"
     depends_on:
+      - backend
+
+  proxy:
+    build:
+      context: ./proxy
+    restart: unless-stopped
+    ports:
+      - "443:443"
+    environment:
+      TLS_CERT_FILE: ${TLS_CERT_FILE:-tls.crt}
+      TLS_KEY_FILE: ${TLS_KEY_FILE:-tls.key}
+      TLS_SERVER_NAME: ${TLS_SERVER_NAME:-localhost}
+    # Default is a named volume holding the generated self-signed cert. In production set
+    # TLS_CERT_DIR to a host directory containing the real certificate and key.
+    volumes:
+      - ${TLS_CERT_DIR:-proxy_certs}:/etc/nginx/certs
+    depends_on:
+      - frontend
       - backend
 
 volumes:
   db_data:
+  proxy_certs:
