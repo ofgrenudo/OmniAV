@@ -3,7 +3,7 @@ erDiagram
     BUILDING ||--o{ EQUIPMENT     : "stocks (permanent home)"
     BUILDING ||--o{ REQUEST       : "hosts"
 
-    BUILDING_ROOM ||--o{ REQUEST  : "reserved by (building_id, room)"
+    BUILDING_ROOM ||--o{ REQUEST  : "reserved by (composite FK: building_id, room)"
 
     EQUIPMENT_GROUP ||--o{ EQUIPMENT           : "contains units"
     EQUIPMENT_GROUP ||--o{ REQUESTED_EQUIPMENT : "requested as group"
@@ -22,8 +22,8 @@ erDiagram
     }
 
     BUILDING_ROOM {
-        uint    building_id PK,FK "-> BUILDING.id"
-        string  room        PK
+        uint    building_id PK,FK "-> BUILDING.id (ON DELETE RESTRICT)"
+        string  room        PK "uppercased, e.g. 112B"
     }
 
     EQUIPMENT_GROUP {
@@ -57,7 +57,7 @@ erDiagram
         int     number_of_weeks
         int16   days_of_week       "enum: Mon..Sun"
         uint    building_id        FK "-> BUILDING.id"
-        string  room               "part of composite FK -> BUILDING_ROOM"
+        string  room               "composite FK (building_id, room) -> BUILDING_ROOM"
         string  comments           "nullable"
         uint    attachment_id      "nullable, no FK yet"
         time    created_at
