@@ -27,6 +27,9 @@ const (
 	serviceEndTime   = "22:00"
 )
 
+// pgForeignKeyViolation is Postgres's SQLSTATE for foreign_key_violation.
+const pgForeignKeyViolation = "23503"
+
 // roomPattern mirrors the frontend's ROOM_NUMBER_PATTERN (frontend/src/utils/room.ts): a room is
 // digits and the wing letters a-c only, e.g. "204" or "123a".
 var roomPattern = regexp.MustCompile(`^[0-9a-cA-C]+$`)

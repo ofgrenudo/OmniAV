@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
@@ -69,6 +70,43 @@ func TestRequestCreate(t *testing.T) {
 		}
 		if count != 1 {
 			t.Errorf("expected exactly 1 building_rooms row for building %d room 101, got %d", building.ID, count)
+		}
+	})
+
+	t.Run("normalizes room case so 101 and lowercase variants share one room", func(t *testing.T) {
+		input := validRequestInput(building.ID, "Lowercase room", 12)
+		input.Room = "112b"
+		if w := doRequest(r, http.MethodPost, "/api/requests", input); w.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+		input = validRequestInput(building.ID, "Uppercase room", 13)
+		input.Room = "112B"
+		if w := doRequest(r, http.MethodPost, "/api/requests", input); w.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+
+		var count int64
+		testDB.Model(&models.BuildingRoom{}).Where("building_id = ? AND room = ?", building.ID, "112B").Count(&count)
+		if count != 1 {
+			t.Errorf("expected 1 room 112B, got %d", count)
+		}
+		testDB.Model(&models.BuildingRoom{}).Where("building_id = ? AND room = ?", building.ID, "112b").Count(&count)
+		if count != 0 {
+			t.Errorf("expected no lowercase 112b room, got %d", count)
+		}
+	})
+
+	t.Run("rejects a missing building and leaves no room behind", func(t *testing.T) {
+		input := validRequestInput(999999, "Ghost building", 14)
+		input.Room = "777"
+		w := doRequest(r, http.MethodPost, "/api/requests", input)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+		}
+		var count int64
+		testDB.Model(&models.BuildingRoom{}).Where("room = ?", "777").Count(&count)
+		if count != 0 {
+			t.Errorf("expected no orphan building_rooms row, got %d", count)
 		}
 	})
 
@@ -300,4 +338,55 @@ func TestRequestDelete(t *testing.T) {
 			t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
 		}
 	})
+}
+
+func TestRoomForeignKeys(t *testing.T) {
+	resetTables(t)
+	building := models.Building{Name: "Anna Whitten Hall"}
+	if err := testDB.Create(&building).Error; err != nil {
+		t.Fatalf("seed building: %v", err)
+	}
+
+	t.Run("building_rooms rejects a nonexistent building", func(t *testing.T) {
+		if err := testDB.Create(&models.BuildingRoom{BuildingID: 999999, Room: "1"}).Error; err == nil {
+			t.Fatal("expected FK violation, got nil")
+		}
+	})
+
+	t.Run("requests rejects a room that doesn't exist in its building", func(t *testing.T) {
+		req := models.Request{
+			Name: "No such room", FirstDateNeeded: futureDate(5), StartTime: clockTime(9, 0), EndTime: clockTime(10, 0),
+			NumberOfWeeks: 1, BuildingID: building.ID, Room: "404",
+		}
+		if err := testDB.Create(&req).Error; err == nil {
+			t.Fatal("expected FK violation, got nil")
+		}
+	})
+}
+
+func TestBuildingRooms(t *testing.T) {
+	r := newTestRouter(t)
+	a := models.Building{Name: "A"}
+	b := models.Building{Name: "B"}
+	testDB.Create(&a)
+	testDB.Create(&b)
+	testDB.Create(&models.BuildingRoom{BuildingID: a.ID, Room: "204"})
+	testDB.Create(&models.BuildingRoom{BuildingID: a.ID, Room: "101"})
+	testDB.Create(&models.BuildingRoom{BuildingID: b.ID, Room: "999"})
+
+	w := doRequest(r, http.MethodGet, fmt.Sprintf("/api/buildings/%d/rooms", a.ID), nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var body struct{ Data []string }
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Data) != 2 || body.Data[0] != "101" || body.Data[1] != "204" {
+		t.Errorf("rooms = %v, want [101 204]", body.Data)
+	}
+
+	if w := doRequest(r, http.MethodGet, "/api/buildings/999999/rooms", nil); w.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for missing building, got %d", w.Code)
+	}
 }

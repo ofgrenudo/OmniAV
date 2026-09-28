@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/ofgrenudo/OmniAv/internal/models"
 	"gorm.io/gorm"
 )
@@ -152,7 +153,8 @@ func (h *RequestHandler) Create(c *gin.Context) {
 		badRequest(c, "name must not be blank")
 		return
 	}
-	input.Room = strings.TrimSpace(input.Room)
+	// Uppercased so "112b" and "112B" are one room in the picker.
+	input.Room = strings.ToUpper(strings.TrimSpace(input.Room))
 	if input.Room == "" {
 		badRequest(c, "room must not be blank")
 		return
@@ -196,16 +198,6 @@ func (h *RequestHandler) Create(c *gin.Context) {
 		return
 	}
 
-	var building models.Building
-	if err := h.DB.First(&building, input.BuildingID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			badRequest(c, "building not found")
-			return
-		}
-		internalError(c, err)
-		return
-	}
-
 	request := models.Request{
 		Name:            input.Name,
 		FirstDateNeeded: firstDate,
@@ -218,7 +210,11 @@ func (h *RequestHandler) Create(c *gin.Context) {
 		Comments:        input.Comments,
 	}
 
+	var building models.Building
 	err = h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.First(&building, input.BuildingID).Error; err != nil {
+			return err
+		}
 		if err := tx.
 			Where(models.BuildingRoom{BuildingID: input.BuildingID, Room: input.Room}).
 			FirstOrCreate(&models.BuildingRoom{}).Error; err != nil {
@@ -227,7 +223,15 @@ func (h *RequestHandler) Create(c *gin.Context) {
 		return tx.Create(&request).Error
 	})
 	if err != nil {
-		internalError(c, err)
+		var pgErr *pgconn.PgError
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			badRequest(c, "building not found")
+		case errors.As(err, &pgErr) && pgErr.Code == pgForeignKeyViolation:
+			badRequest(c, "building not found")
+		default:
+			internalError(c, err)
+		}
 		return
 	}
 

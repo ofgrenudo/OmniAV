@@ -23,6 +23,7 @@ func (h *BuildingHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	{
 		buildings.GET("", h.List)
 		buildings.GET("/:id", h.Get)
+		buildings.GET("/:id/rooms", h.ListRooms)
 		buildings.POST("", h.Create)
 		buildings.PUT("/:id", h.Update)
 		buildings.DELETE("/:id", h.Delete)
@@ -209,4 +210,34 @@ func (h *BuildingHandler) Delete(c *gin.Context) {
 	}
 
 	c.Status(http.StatusNoContent)
+}
+
+// ListRooms returns the rooms known for a building, for the frontend's room picker.
+func (h *BuildingHandler) ListRooms(c *gin.Context) {
+	id, err := parseIDParam(c)
+	if err != nil {
+		badRequest(c, "invalid building id")
+		return
+	}
+
+	var count int64
+	if err := h.DB.Model(&models.Building{}).Where("id = ?", id).Count(&count).Error; err != nil {
+		internalError(c, err)
+		return
+	}
+	if count == 0 {
+		notFound(c, "building not found")
+		return
+	}
+
+	rooms := []string{}
+	if err := h.DB.Model(&models.BuildingRoom{}).
+		Where("building_id = ?", id).
+		Order("room").
+		Pluck("room", &rooms).Error; err != nil {
+		internalError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": rooms})
 }
