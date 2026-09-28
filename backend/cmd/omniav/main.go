@@ -50,6 +50,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := models.AddRequestRoomConstraint(db); err != nil {
+		slog.Error("Failed to add requests -> building_rooms constraint", slog.Any("error", err))
+		os.Exit(1)
+	}
+
 	slog.Info("Database migrations completed successfully")
 
 	r := gin.Default()

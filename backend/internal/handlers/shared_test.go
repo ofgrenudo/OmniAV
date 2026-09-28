@@ -47,6 +47,11 @@ func seedRequest(t *testing.T, o requestOpts) models.Request {
 	if room == "" {
 		room = "101"
 	}
+	// Requests reference building_rooms through a composite FK, so the room must exist first.
+	if err := testDB.Where(models.BuildingRoom{BuildingID: o.buildingID, Room: room}).
+		FirstOrCreate(&models.BuildingRoom{}).Error; err != nil {
+		t.Fatalf("seed room %q: %v", room, err)
+	}
 	r := models.Request{
 		Name:            o.name,
 		FirstDateNeeded: o.firstDate,

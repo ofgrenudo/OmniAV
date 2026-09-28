@@ -73,6 +73,9 @@ func runWithContainer(m *testing.M) (int, error) {
 	); err != nil {
 		return 1, fmt.Errorf("migrate: %w", err)
 	}
+	if err := models.AddRequestRoomConstraint(db); err != nil {
+		return 1, fmt.Errorf("add request room constraint: %w", err)
+	}
 
 	testDB = db
 	gin.SetMode(gin.TestMode)
